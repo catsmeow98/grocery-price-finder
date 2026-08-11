@@ -1,5 +1,9 @@
 import type { ShoppingListItem } from "@/lib/database";
 
+export type ProductOption = {
+  name: string;
+};
+
 export type Product = {
   id: string;
   name: string;

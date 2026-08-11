@@ -4,9 +4,8 @@ import QuantitySelector, {
   type QuantityOption,
 } from "./QuantitySelector";
 
-import ProductAutocomplete, {
-  type ProductOption,
-} from "./ProductAutocomplete";
+import ProductAutocomplete from "./ProductAutocomplete";
+import type { ProductOption } from "@/types/shopping";
 
 
 type GroceryListFormProps = {

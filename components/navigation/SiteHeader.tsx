@@ -16,7 +16,6 @@ export const SITE_NAME = "PriceScout";
 const navItems = [
   { label: "Search", href: "/", exact: true },
   { label: "Grocery List", href: "/shopping-list" },
-  { label: "Shopping Plan", href: "/shopping-plan" },
   { label: "Preferences", href: "/preferences" },
 ];
 

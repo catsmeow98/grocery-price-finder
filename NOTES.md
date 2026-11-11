@@ -59,6 +59,9 @@ Last updated: 2026-11-11
 - Blocked brands are never starred "Best value" on cards
 - Design choice to revisit: the cheapest/preferred prompt shows every visit (not remembered)
 
+## Done 2026-11-11 (simplify)
+- Removed the separate Shopping Plan page/nav item: the plan already shows under the list on `/shopping-list`. `/shopping-plan` now redirects there
+
 ## Next (in order)
 1. Run `supabase/01_security.sql`, then `supabase/02_sample_data.sql` in the Supabase SQL Editor
 2. `npm install`, `npm run build`, `npm run dev`; fix any errors

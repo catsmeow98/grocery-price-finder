@@ -1,6 +1,6 @@
 # NOTES: Grocery Price Finder
 
-Last updated: 2026-11-10
+Last updated: 2026-11-11
 
 > Read this file first at the start of every session. Update it at the end of every session.
 > Goal right now: a **working prototype using sample data** (not Metro Detroit specific).
@@ -15,26 +15,37 @@ Last updated: 2026-11-10
 - Shopping plan (`lib/shoppingUtils.ts`): match items, compute packages needed, pick cheapest, group by store, total
 - Secrets: no keys in code. `.env*` is gitignored. Only `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are used.
 
-## Reported but NOT in the repo (exists only on the owner's computer, never committed)
-- `scripts/import-prices.ts` (CSV importer)
-- `data/grocery_prices.csv`
-- A 1-row import test (ALDI Warren, Friendly Farms 2% milk, 1 gal, $2.99)
+## Real database (confirmed from Supabase 2026-11-11)
+- `stores(id uuid, name, city, address, state, zip, created_at)`
+- `products(id uuid, name, brand, quantity, unit, unit_type, "UPC", updated_at)`  (no price, no store)
+- `prices(id, product_id, store_id, price, sale_price, available, observed_at, source, created_at)`
+- `shopping_lists(id, name, user_id, created_at)`, `shopping_list_items(id, shopping_list_id, product_name, quantity, unit, completed, created_at)`
+- Row counts before this session: 4 stores, 176 products, 1 price
+- RLS before this session: ON for prices/lists/items, OFF for stores and products (fixed by 01_security.sql, not yet run)
+
+## Done this session (code written, NOT yet tested; no node_modules available to build)
+- Decision: Option B (products + prices tables). The app now reads prices via `lib/products.ts` (`getProductsWithPrices`): newest price per product+store, skips unavailable, uses sale price when lower
+- `app/page.tsx` and `getProductsWithStores()` in `lib/database.ts` use it
+- `supabase/01_security.sql`: RLS on, public read of stores/products/prices, per-user lists
+- `scripts/make_sample_data.py` generates `supabase/02_sample_data.sql` (44 products, 4 stores, ~239 price rows incl. sales, old prices, missing and out-of-stock items); `supabase/03_remove_sample_data.sql` deletes only sample rows
+
+## Reported but NOT in the repo (exists only on the owner's computer)
+- `scripts/import-prices.ts` (CSV importer), `data/grocery_prices.csv`
 
 ## In Progress
-- Getting the app to show real rows from sample data end to end
+- Owner runs 01 and 02 in Supabase, then clicks through the app
 
 ## Next (in order)
-1. Confirm the real Supabase schema (run the SQL in "Open questions") and paste the result
-2. Decide the schema direction (Option A or B below), then align the app and the importer
-3. Commit the importer and CSV to the repo
-4. Generate a sample dataset (about 40 products x 6 stores, tagged `source = 'sample'`) and import it
-5. Click-test: search, add to list, build shopping plan
-6. Verify row-level security (lists private per user; products, stores, prices read-only to the public)
-7. Verify the Vercel production site: env vars set, login works, data loads
-8. Add a `NOTES.md` update + commit after every working step
+1. Run `supabase/01_security.sql`, then `supabase/02_sample_data.sql` in the Supabase SQL Editor
+2. `npm install`, `npm run build`, `npm run dev`; fix any errors
+3. Click-test: search, add items to a list (log in first), open shopping plan
+4. Check the 176 existing products with no prices (duplicates from the importer?)
+5. Verify Vercel production (env vars set, login works)
+6. Commit the CSV importer; update it to the products + prices layout
+7. Update this file and commit after every working step
 
 ## Known issues / risks
-- **Schema mismatch (high priority):** the UI reads `products.price` and `products.store_id` (a number) and joins `stores(name, city)`. The reported importer writes UUIDs and a separate `prices` table. Imported prices will not show up until these agree.
+- Autocomplete suggests products even if they have no prices (176 products vs 1 price before sample data).
 - `lib/proxy.ts` is probably not active. Next.js 16 expects `proxy.ts` at the project root (verify, then move).
 - "Updated recently" on the home page is hard-coded text, not real data.
 - The planner matches products by substring of name (e.g. "milk" also matches "almond milk").
@@ -57,4 +68,5 @@ where schemaname = 'public';
 
 ## Decision log
 - 2026-11-10: Dropped the subscription model for now; focus on a working local grocery comparison prototype.
+- 2026-11-11: Option B chosen: keep `products` + `prices` tables (supports price history).
 - 2026-11-10: Data source for the prototype = generated sample data (tagged `sample`), not real prices.

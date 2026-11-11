@@ -1,4 +1,6 @@
 import { supabase } from "@/lib/supabase";
+import { getProductsWithPrices } from "@/lib/products";
+import type { Product } from "@/types/shopping";
 
 import Header from "@/components/Header";
 import SearchBar from "@/components/SearchBar";
@@ -12,37 +14,24 @@ export default async function Home({
   searchParams: Promise<{ search?: string }>;
 }) {
   const { search } = await searchParams;
-  let query = supabase
-    .from("products")
-    .select(`
-      *,
-      stores (
-        name,
-        city
-      )
-    `);
+  let products: Product[] = [];
+  let error: { message: string } | null = null;
 
-  if (search) {
-    query = query.ilike("name", `%${search}%`);
+  try {
+    products = await getProductsWithPrices(
+      supabase,
+      search
+    );
+  } catch (err) {
+    error = {
+      message:
+        typeof err === "object" &&
+        err !== null &&
+        "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Unable to load prices.",
+    };
   }
-
-  const { data: products, error } = await query.order(
-    "price",
-    { ascending: true }
-  );
-
-  const groupedProducts = products?.reduce(
-    (groups, product) => {
-      if (!groups[product.name]) {
-        groups[product.name] = [];
-      }
-
-      groups[product.name].push(product);
-
-      return groups;
-    },
-    {} as Record<string, typeof products>
-  );
 
   if (error) {
     return (
@@ -107,7 +96,7 @@ export default async function Home({
           </div>
 
           <SearchResults
-            products={products ?? []}
+            products={products}
             search={search}
           />
         </div>

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { getProductsWithPrices } from "@/lib/products";
 
 export type ShoppingListItem = {
   id: string;
@@ -11,23 +12,8 @@ export type ShoppingListItem = {
 
 
 export async function getProductsWithStores() {
-  const supabase = createClient();
-  
-  const { data, error } = await supabase
-    .from("products")
-    .select(`
-      *,
-      stores (
-        name,
-        city
-      )
-    `);
-
-  if (error) {
-    throw error;
-  }
-
-  return data ?? [];
+  // Products with their current price at each store.
+  return getProductsWithPrices(createClient());
 }
 
 

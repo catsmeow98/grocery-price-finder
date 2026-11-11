@@ -4,7 +4,7 @@ import {
 } from "@/lib/priceUtils";
 
 type Product = {
-  id: number;
+  id: string;
   name: string;
   brand: string | null;
   quantity: number;
@@ -14,7 +14,7 @@ type Product = {
   stores?: {
     name: string;
     city: string;
-  };
+  } | null;
 };
 
 type ProductCardProps = {

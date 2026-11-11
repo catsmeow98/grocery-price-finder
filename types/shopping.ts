@@ -8,11 +8,13 @@ export type Product = {
   id: string;
   name: string;
   price: number;
+  regular_price?: number;
+  sale_price?: number | null;
   quantity: number;
   unit: string;
   unit_type: string;
   brand: string | null;
-  store_id: number | null;
+  store_id: string | null;
   stores: {
     name: string;
     city: string;

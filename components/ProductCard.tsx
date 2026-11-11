@@ -1,3 +1,4 @@
+import AddToListButton from "@/components/shopping-list/AddToListButton";
 import {
   getUnitPrice,
   formatUnitPrice,
@@ -84,6 +85,42 @@ export default function ProductCard({
   }
 
   /*
+   * What "Add to list" adds: 1 lb / 1 gal for weight and
+   * volume items, or the smallest package size for counts
+   * (e.g. 12 eggs). It can be edited on the list page.
+   */
+  const unitType = String(
+    products[0]?.unit_type ?? ""
+  )
+    .toLowerCase()
+    .trim();
+
+  let defaultQuantity = 1;
+  let defaultUnit = products[0]?.unit ?? "";
+
+  if (unitType === "weight") {
+    defaultUnit = "lb";
+  } else if (unitType === "volume") {
+    defaultUnit = "gal";
+  } else if (unitType === "count") {
+    defaultUnit = "count";
+
+    const smallest = Math.min(
+      ...products.map((product) =>
+        Number(product.quantity)
+      )
+    );
+
+    if (
+      Number.isInteger(smallest) &&
+      smallest >= 1 &&
+      smallest <= 20
+    ) {
+      defaultQuantity = smallest;
+    }
+  }
+
+  /*
    * When Compare Brands is OFF, the card
    * represents one brand, so include that
    * brand in the card title.
@@ -99,14 +136,22 @@ export default function ProductCard({
   return (
     <div className="rounded-2xl border border-border bg-surface p-5 transition hover:border-primary/30 hover:bg-surface-hover">
       {/* Product header */}
-      <div className="mb-5">
-        <h3 className="text-xl font-semibold text-foreground">
-          {cardTitle}
-        </h3>
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-xl font-semibold text-foreground">
+            {cardTitle}
+          </h3>
 
-        <p className="mt-1 text-sm text-text-muted">
-          {sortedProducts.length} options
-        </p>
+          <p className="mt-1 text-sm text-text-muted">
+            {sortedProducts.length} options
+          </p>
+        </div>
+
+        <AddToListButton
+          productName={name}
+          defaultQuantity={defaultQuantity}
+          defaultUnit={defaultUnit}
+        />
       </div>
 
       {/* Product options */}

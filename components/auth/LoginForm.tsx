@@ -4,8 +4,13 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { signIn } from "@/lib/auth";
+import { safeNextPath } from "@/lib/redirect";
 
-export default function LoginForm() {
+export default function LoginForm({
+  next,
+}: {
+  next?: string;
+}) {
   const router = useRouter();
 
   const [email, setEmail] =
@@ -34,7 +39,7 @@ export default function LoginForm() {
         password
       );
 
-      router.push("/shopping-list");
+      router.push(safeNextPath(next));
       router.refresh();
     } catch (err) {
       console.error(err);

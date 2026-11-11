@@ -4,8 +4,13 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { signUp } from "@/lib/auth";
+import { safeNextPath } from "@/lib/redirect";
 
-export default function SignupForm() {
+export default function SignupForm({
+  next,
+}: {
+  next?: string;
+}) {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
@@ -70,7 +75,7 @@ export default function SignupForm() {
        * Supabase may immediately create a session.
        */
       if (data.session) {
-        router.push("/shopping-list");
+        router.push(safeNextPath(next));
         router.refresh();
       }
     } catch (err) {

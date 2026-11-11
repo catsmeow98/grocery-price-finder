@@ -81,6 +81,8 @@ export async function updateSession(
       request.nextUrl.clone();
 
     url.pathname = "/login";
+    url.search = "";
+    url.searchParams.set("next", pathname);
 
     return NextResponse.redirect(
       url

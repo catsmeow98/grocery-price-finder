@@ -48,6 +48,10 @@ Last updated: 2026-11-11
 - Brand name is "PriceScout" (constant `SITE_NAME` in SiteHeader; login/signup pages and page title updated)
 - Shopping Plan page now has a heading and an "Edit grocery list" link
 
+## Done 2026-11-11 (add to list + login return; untested)
+- "+ Add to list" button on each search card (`components/shopping-list/AddToListButton.tsx`): adds 1 lb / 1 gal (weight/volume) or the smallest package count (e.g. 12 eggs); checks duplicates; logged-out users are sent to login and returned to the same search page
+- Login/signup return you to the page you were headed to: proxy adds `?next=<path>`, `lib/redirect.ts` only allows in-site paths; default after login is /shopping-list
+
 ## Next (in order)
 1. Run `supabase/01_security.sql`, then `supabase/02_sample_data.sql` in the Supabase SQL Editor
 2. `npm install`, `npm run build`, `npm run dev`; fix any errors
@@ -55,7 +59,7 @@ Last updated: 2026-11-11
 4. Add real prices for the 175 catalog products that have none (they are real products: Meijer/Kirkland/etc.). Needs updated CSV importer
 5. (done) Verify Vercel production
 6. Later: real prices (CSV importer to products + prices layout)
-   Ideas: "Add to list" button on product cards, price-history chart, mobile polish, redirect back to the page you came from after login
+   Ideas: price-history chart, mobile polish, auto-add the item the user clicked before being sent to login
 7. Update this file and commit after every working step
 
 ## Known issues / risks

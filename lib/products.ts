@@ -126,6 +126,7 @@ export async function getProductsWithPrices(
       regular_price: regular,
       sale_price: onSale ? sale : null,
       store_id: row.store_id,
+      observed_at: row.observed_at,
       stores: row.stores,
     });
   }

@@ -36,11 +36,29 @@ export function findProductMatches(
     return [];
   }
 
-  return products.filter(
+  /*
+   * 1. Prefer exact name matches.
+   *    The autocomplete picks exact product names, so
+   *    "Milk" must not also match "Almond Milk".
+   */
+  const exact = products.filter(
     (product) =>
-      product.name
-        .toLowerCase()
-        .includes(searchTerm)
+      product.name.toLowerCase().trim() ===
+      searchTerm
+  );
+
+  if (exact.length > 0) {
+    return exact;
+  }
+
+  /*
+   * 2. Fall back to a partial match, for items
+   *    typed by hand (e.g. "beef").
+   */
+  return products.filter((product) =>
+    product.name
+      .toLowerCase()
+      .includes(searchTerm)
   );
 }
 

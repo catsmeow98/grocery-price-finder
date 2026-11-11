@@ -33,6 +33,22 @@ export default async function Home({
     };
   }
 
+  const latestObserved = products
+    .map((product) => product.observed_at)
+    .filter((date): date is string => Boolean(date))
+    .sort()
+    .pop();
+
+  const updatedLabel = latestObserved
+    ? `Prices as of ${new Date(
+        latestObserved
+      ).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })}`
+    : "No prices yet";
+
   if (error) {
     return (
       <main className="min-h-screen bg-background px-6 py-12 text-foreground">
@@ -91,7 +107,7 @@ export default async function Home({
             />
 
             <span className="text-sm text-text-muted">
-              Updated recently
+              {updatedLabel}
             </span>
           </div>
 

@@ -72,19 +72,11 @@ export async function updateSession(
   const isLoggedIn =
     !!claimsData?.claims;
 
-  console.log(
-    "[AUTH]",
-    pathname,
-    "logged in:",
-    isLoggedIn
-  );
+  const isProtected =
+    pathname.startsWith("/shopping-list") ||
+    pathname.startsWith("/shopping-plan");
 
-  if (
-    !isLoggedIn &&
-    pathname.startsWith(
-      "/shopping-list"
-    )
-  ) {
+  if (!isLoggedIn && isProtected) {
     const url =
       request.nextUrl.clone();
 

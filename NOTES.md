@@ -33,7 +33,14 @@ Last updated: 2026-11-11
 - `scripts/import-prices.ts` (CSV importer), `data/grocery_prices.csv`
 
 ## In Progress
-- Owner runs 01 and 02 in Supabase, then clicks through the app
+- Owner click-testing the full flow (search, list, plan, two users)
+- Orphan products: owner to run `supabase/04_find_orphan_products.sql` and report
+
+## Done 2026-11-11 (later; untested, no build possible in cloud)
+- Planner matches exact product name first, partial match only as fallback
+- `proxy.ts` moved to project root so it runs; `/shopping-list` and `/shopping-plan` now redirect to /login when logged out; removed [AUTH] debug log
+- Home page shows real "Prices as of <date>"
+- README rewritten; added `supabase/04_find_orphan_products.sql`
 
 ## Next (in order)
 1. Run `supabase/01_security.sql`, then `supabase/02_sample_data.sql` in the Supabase SQL Editor
@@ -46,10 +53,6 @@ Last updated: 2026-11-11
 
 ## Known issues / risks
 - Autocomplete suggests products even if they have no prices (176 products vs 1 price before sample data).
-- `lib/proxy.ts` is probably not active. Next.js 16 expects `proxy.ts` at the project root (verify, then move).
-- "Updated recently" on the home page is hard-coded text, not real data.
-- The planner matches products by substring of name (e.g. "milk" also matches "almond milk").
-- README is still the default Next.js template.
 - Subscriptions/Stripe are out of scope until the prototype works.
 
 ## Open questions

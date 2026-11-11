@@ -15,6 +15,7 @@ export type Product = {
   unit_type: string;
   brand: string | null;
   store_id: string | null;
+  observed_at?: string | null;
   stores: {
     name: string;
     city: string;

@@ -69,8 +69,8 @@ export default function GroceryListForm({
       </h2>
 
       <p className="mb-5 text-sm text-text-muted">
-        Add the items you need and we'll
-        find the best prices.
+        Search for an item and choose it from
+        the list, then pick a quantity.
       </p>
 
       <div className="grid gap-3 sm:grid-cols-[1fr_180px_auto]">

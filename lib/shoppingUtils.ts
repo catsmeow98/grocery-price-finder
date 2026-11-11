@@ -12,16 +12,11 @@ import type {
 import type { ShoppingListItem } from "@/lib/database";
 
 /**
- * Find products that match a grocery-list item.
+ * Find the products that match a grocery-list item.
  *
- * Example:
- *
- * "beef"
- *
- * can match:
- * - Ground Beef 80/20
- * - Beef Brisket
- * - Beef Chuck Roast
+ * Match is by exact product name (case-insensitive).
+ * Items are chosen from the dropdown, so names always
+ * match what is in the database.
  */
 export function findProductMatches(
   products: Product[],
@@ -37,28 +32,14 @@ export function findProductMatches(
   }
 
   /*
-   * 1. Prefer exact name matches.
-   *    The autocomplete picks exact product names, so
-   *    "Milk" must not also match "Almond Milk".
+   * Items are always picked from the dropdown, so the name
+   * must match a product name exactly ("Milk" never matches
+   * "Almond Milk").
    */
-  const exact = products.filter(
+  return products.filter(
     (product) =>
       product.name.toLowerCase().trim() ===
       searchTerm
-  );
-
-  if (exact.length > 0) {
-    return exact;
-  }
-
-  /*
-   * 2. Fall back to a partial match, for items
-   *    typed by hand (e.g. "beef").
-   */
-  return products.filter((product) =>
-    product.name
-      .toLowerCase()
-      .includes(searchTerm)
   );
 }
 

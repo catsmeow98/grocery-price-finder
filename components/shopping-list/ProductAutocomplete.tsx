@@ -21,7 +21,7 @@ export default function ProductAutocomplete({
     <div className="relative">
       <input
         type="text"
-        placeholder="e.g. Ground beef"
+        placeholder="Start typing, then pick from the list"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none placeholder:text-text-muted focus:border-primary"

@@ -34,10 +34,10 @@ Last updated: 2026-11-11
 
 ## In Progress
 - Owner click-testing the full flow (search, list, plan, two users)
-- Orphan products: owner to run `supabase/04_find_orphan_products.sql` and report
+- Owner to run `supabase/05_merge_duplicate_products.sql` (step 1 preview, then step 2), then `06_prevent_duplicate_products.sql`
 
 ## Done 2026-11-11 (later; untested, no build possible in cloud)
-- Planner matches exact product name first, partial match only as fallback
+- List items must be picked from the dropdown (typing clears the selection); dropdown only suggests products that have prices; planner matches by exact name only
 - `proxy.ts` moved to project root so it runs; `/shopping-list` and `/shopping-plan` now redirect to /login when logged out; removed [AUTH] debug log
 - Home page shows real "Prices as of <date>"
 - README rewritten; added `supabase/04_find_orphan_products.sql`
@@ -46,13 +46,14 @@ Last updated: 2026-11-11
 1. Run `supabase/01_security.sql`, then `supabase/02_sample_data.sql` in the Supabase SQL Editor
 2. `npm install`, `npm run build`, `npm run dev`; fix any errors
 3. Click-test: search, add items to a list (log in first), open shopping plan
-4. Check the 176 existing products with no prices (duplicates from the importer?)
+4. Add real prices for the 175 catalog products that have none (they are real products: Meijer/Kirkland/etc.). Needs updated CSV importer
 5. Verify Vercel production (env vars set, login works)
 6. Commit the CSV importer; update it to the products + prices layout
 7. Update this file and commit after every working step
 
 ## Known issues / risks
-- Autocomplete suggests products even if they have no prices (176 products vs 1 price before sample data).
+- 175 of 176 real catalog products have no prices yet, so they don't show in search or the dropdown. 11 duplicate groups (same name/brand/size) from the importer; merge with 05.
+- Catalog data oddities to review: Canned Black Beans S&W 180 oz, Eggs Kirkland 60 ct; units use `ct` and `Count`/`Weight` capitalized (code lowercases, OK).
 - Subscriptions/Stripe are out of scope until the prototype works.
 
 ## Open questions

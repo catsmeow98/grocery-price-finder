@@ -43,7 +43,14 @@ export function useGroceryList({
   const [savingEdit, setSavingEdit] =
     useState(false);
 
-  const [productName, setProductName] =
+  const [productName, setProductNameRaw] =
+    useState("");
+
+  /*
+   * The product the user picked from the dropdown.
+   * Items can only be added when productName matches it.
+   */
+  const [selectedProduct, setSelectedProduct] =
     useState("");
 
   const [quantity, setQuantity] =
@@ -81,6 +88,23 @@ export function useGroceryList({
 
   const [selectedQuantityKey, setSelectedQuantityKey] =
     useState("");
+
+  /*
+   * Called when the user TYPES in the product box.
+   * Typing clears any earlier dropdown choice, so a
+   * hand-typed name can never be added to the list.
+   */
+  function setProductName(value: string) {
+    setProductNameRaw(value);
+
+    if (value !== selectedProduct) {
+      setSelectedProduct("");
+      setQuantity("");
+      setUnit("");
+      setSelectedQuantityKey("");
+      setQuantityOptions([]);
+    }
+  }
 
   /*
    * Load the shopping list.
@@ -127,13 +151,20 @@ export function useGroceryList({
       return;
     }
 
+    // Don't reopen the dropdown right after a selection.
+    if (searchTerm === selectedProduct) {
+      return;
+    }
+
     const timeout = setTimeout(
       async () => {
         try {
           const { data, error } =
             await supabase
               .from("products")
-              .select("name")
+              // prices!inner: only suggest products that
+              // have at least one price.
+              .select("name, prices!inner(id)")
               .ilike(
                 "name",
                 `%${searchTerm}%`
@@ -174,7 +205,7 @@ export function useGroceryList({
 
     return () =>
       clearTimeout(timeout);
-  }, [productName]);
+  }, [productName, selectedProduct]);
 
   /*
    * Generate requested quantity
@@ -245,7 +276,8 @@ export function useGroceryList({
     product: ProductOption
   ) {
     try {
-      setProductName(product.name);
+      setProductNameRaw(product.name);
+      setSelectedProduct(product.name);
       setShowSuggestions(false);
 
       setQuantity("");
@@ -340,6 +372,14 @@ export function useGroceryList({
       return;
     }
 
+    if (trimmedName !== selectedProduct) {
+      setError(
+        "Please choose a product from the dropdown list."
+      );
+
+      return;
+    }
+
     const duplicate =
       items.find(
         (item) =>
@@ -387,7 +427,8 @@ export function useGroceryList({
         newItem,
       ]);
 
-      setProductName("");
+      setProductNameRaw("");
+      setSelectedProduct("");
       setQuantity("");
       setUnit("");
       setSelectedQuantityKey("");

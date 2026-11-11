@@ -151,9 +151,11 @@ export type PlanOptions = {
  * For every grocery-list item:
  *
  * 1. Find matching products
- * 2. Remove blocked brands (always, in both modes)
- * 3. "preferred" mode: keep only preferred brands, when
- *    any are available; otherwise fall back to cheapest
+ * 2. "cheapest" mode: ignore all brand preferences and
+ *    pick the lowest price
+ * 3. "preferred" mode: remove blocked brands, then keep
+ *    only preferred brands when any are available;
+ *    otherwise fall back to the cheapest allowed option
  * 4. Pick the cheapest of what is left
  */
 export function buildShoppingResults(
@@ -188,9 +190,13 @@ export function buildShoppingResults(
       continue;
     }
 
-    const allowed = matches.filter(
-      (product) => prefOf(product) !== "blocked"
-    );
+    // Blocked brands only matter in "preferred" mode.
+    const allowed =
+      options.mode === "preferred"
+        ? matches.filter(
+            (product) => prefOf(product) !== "blocked"
+          )
+        : matches;
 
     if (allowed.length === 0) {
       skipped.push({ item, reason: "blocked" });

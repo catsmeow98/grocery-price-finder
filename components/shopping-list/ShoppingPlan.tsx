@@ -214,10 +214,6 @@ export default function ShoppingPlan({
           How should we choose products?
         </h2>
 
-        <p className="mt-1 text-sm text-text-muted">
-          Brands you blocked are never used in either
-          option.
-        </p>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <button
@@ -231,7 +227,7 @@ export default function ShoppingPlan({
 
             <p className="mt-1 text-sm text-text-muted">
               The lowest total price, whatever the
-              brand.
+              brand. Ignores your brand preferences.
             </p>
           </button>
 
@@ -245,8 +241,9 @@ export default function ShoppingPlan({
             </p>
 
             <p className="mt-1 text-sm text-text-muted">
-              Use your preferred brands when
-              available, otherwise the cheapest.
+              Uses your preferred brands when
+              available (otherwise the cheapest) and
+              never uses brands you blocked.
             </p>
           </button>
         </div>

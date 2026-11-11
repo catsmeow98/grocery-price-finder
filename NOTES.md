@@ -55,7 +55,7 @@ Last updated: 2026-11-11
 ## Done 2026-11-11 (sale badge + brand preferences; UI untested, planner logic tested with a script)
 - Sale badge + struck-through regular price on search cards and a Sale pill in the plan
 - Brand preferences per item + brand: "♡ Prefer" / "⊘ Block" buttons on each search row; `/preferences` page lists and removes them; table `product_preferences` (RLS, own rows) via `supabase/07_preferences.sql` (OWNER MUST RUN)
-- Plan prompts "Cheapest" or "My preferred brands" each time it opens, with a switch afterwards. Blocked brands are never used in either mode; preferred mode uses preferred brands when available, else cheapest with a note; fully blocked or unmatched items appear under "Not included"
+- Plan prompts "Cheapest" or "My preferred brands" each time it opens, with a switch afterwards. Cheapest mode ignores all preferences (plain lowest price). Preferred mode never uses blocked brands, uses preferred brands when available, else cheapest with a note; fully blocked or unmatched items appear under "Not included"
 - Blocked brands are never starred "Best value" on cards
 - Design choice to revisit: the cheapest/preferred prompt shows every visit (not remembered)
 

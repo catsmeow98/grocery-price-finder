@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 import ShoppingPlanStore from "./ShoppingPlanStore";
 
@@ -11,15 +12,16 @@ import {
   type ShoppingListItem,
 } from "@/lib/database";
 
+import { computeShoppingPlan } from "@/lib/shoppingUtils";
 import {
-  getShoppingPlanData,
-} from "@/lib/shoppingUtils";
+  getPreferenceRows,
+  toPreferenceMap,
+} from "@/lib/preferences";
 
 import type {
+  PlanMode,
+  PreferenceMap,
   Product,
-  ShoppingPlan,
-  ShoppingResult,
-  StoreGroup,
 } from "@/types/shopping";
 
 type ShoppingPlanProps = {
@@ -33,8 +35,19 @@ export default function ShoppingPlan({
     ShoppingListItem[]
   >([]);
 
-  const [plan, setPlan] =
-    useState<ShoppingPlan | null>(null);
+  const [products, setProducts] = useState<
+    Product[]
+  >([]);
+
+  const [preferences, setPreferences] =
+    useState<PreferenceMap>({});
+
+  /*
+   * null = the customer has not chosen yet,
+   * so we ask them first.
+   */
+  const [mode, setMode] =
+    useState<PlanMode | null>(null);
 
   const [loading, setLoading] =
     useState(true);
@@ -43,64 +56,46 @@ export default function ShoppingPlan({
     useState<string | null>(null);
 
   useEffect(() => {
-    async function loadPlan() {
+    async function loadPlanData() {
       try {
         setLoading(true);
         setError(null);
 
-        /*
-         * Get the current shopping list.
-         */
         const list =
           await getOrCreateShoppingList();
 
-        /*
-         * Get all grocery-list items.
-         */
         const listItems =
-          await getShoppingListItems(
-            list.id
-          );
+          await getShoppingListItems(list.id);
 
         setItems(listItems);
 
-        /*
-         * If the list is empty,
-         * clear the shopping plan.
-         */
         if (listItems.length === 0) {
-          setPlan(null);
           return;
         }
 
-        /*
-         * Get all products and stores.
-         */
-        const products =
+        const loadedProducts =
           await getProductsWithStores();
 
-        const typedProducts =
-          products as Product[];
+        setProducts(loadedProducts as Product[]);
 
         /*
-         * Build the complete shopping plan.
-         *
-         * This handles:
-         *
-         * - product matching
-         * - quantity normalization
-         * - package calculations
-         * - cheapest option
-         * - store grouping
-         * - total cost
+         * Preferences are optional: if they can't be
+         * loaded, the plan still works without them.
          */
-        const shoppingPlan =
-          await getShoppingPlanData(
-            listItems,
-            typedProducts
+        try {
+          setPreferences(
+            toPreferenceMap(
+              await getPreferenceRows()
+            )
+          );
+        } catch (prefError) {
+          console.error(
+            "Unable to load preferences:",
+            prefError
           );
 
-        setPlan(shoppingPlan);
+          setPreferences({});
+        }
       } catch (err) {
         console.error(err);
 
@@ -112,8 +107,27 @@ export default function ShoppingPlan({
       }
     }
 
-    loadPlan();
+    loadPlanData();
   }, [refreshKey]);
+
+  const plan = useMemo(
+    () =>
+      mode && items.length > 0
+        ? computeShoppingPlan(items, products, {
+            mode,
+            preferences,
+          })
+        : null,
+    [items, products, preferences, mode]
+  );
+
+  const preferredCount = Object.values(
+    preferences
+  ).filter((value) => value === "preferred").length;
+
+  const blockedCount = Object.values(
+    preferences
+  ).filter((value) => value === "blocked").length;
 
   /*
    * Pull the calculated values
@@ -121,6 +135,9 @@ export default function ShoppingPlan({
    */
   const results =
     plan?.results ?? [];
+
+  const skipped =
+    plan?.skipped ?? [];
 
   const storeGroups =
     plan?.storeGroups ?? [];
@@ -167,8 +184,114 @@ export default function ShoppingPlan({
     );
   }
 
+  /*
+   * Ask how to build the plan before showing it.
+   */
+  if (mode === null) {
+    return (
+      <div className="rounded-2xl border border-border bg-surface p-6">
+        <p className="text-sm font-semibold uppercase tracking-wider text-primary">
+          Build your shopping plan
+        </p>
+
+        <h2 className="mt-2 text-2xl font-bold text-foreground">
+          How should we choose products?
+        </h2>
+
+        <p className="mt-1 text-sm text-text-muted">
+          Brands you blocked are never used in either
+          option.
+        </p>
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setMode("cheapest")}
+            className="rounded-2xl border border-border bg-background/40 p-5 text-left transition hover:border-primary/40 hover:bg-surface-hover"
+          >
+            <p className="text-lg font-semibold text-foreground">
+              Cheapest
+            </p>
+
+            <p className="mt-1 text-sm text-text-muted">
+              The lowest total price, whatever the
+              brand.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMode("preferred")}
+            className="rounded-2xl border border-border bg-background/40 p-5 text-left transition hover:border-accent/40 hover:bg-surface-hover"
+          >
+            <p className="text-lg font-semibold text-foreground">
+              My preferred brands
+            </p>
+
+            <p className="mt-1 text-sm text-text-muted">
+              Use your preferred brands when
+              available, otherwise the cheapest.
+            </p>
+          </button>
+        </div>
+
+        <p className="mt-4 text-xs text-text-muted">
+          You have {preferredCount} preferred and{" "}
+          {blockedCount} blocked{" "}
+          {preferredCount + blockedCount === 1
+            ? "brand"
+            : "brands"}
+          .{" "}
+          <Link
+            href="/preferences"
+            className="text-primary underline"
+          >
+            Manage preferences
+          </Link>
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
+
+      {/* Plan type */}
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-sm text-text-muted">
+          Plan type
+        </span>
+
+        <div className="inline-flex rounded-xl border border-border bg-surface p-1">
+          {(
+            [
+              ["cheapest", "Cheapest"],
+              ["preferred", "Preferred brands"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={mode === value}
+              onClick={() => setMode(value)}
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                mode === value
+                  ? "bg-primary text-background"
+                  : "text-text-secondary hover:text-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <Link
+          href="/preferences"
+          className="text-sm text-text-muted underline hover:text-foreground"
+        >
+          Manage preferences
+        </Link>
+      </div>
 
       {/* Summary */}
       <div className="rounded-2xl border border-border bg-surface p-6">
@@ -233,6 +356,31 @@ export default function ShoppingPlan({
         </div>
 
       </div>
+
+      {/* Items that could not be planned */}
+      {skipped.length > 0 && (
+        <div className="rounded-2xl border border-border bg-surface p-6">
+          <h3 className="text-lg font-semibold text-foreground">
+            Not included
+          </h3>
+
+          <ul className="mt-3 space-y-2">
+            {skipped.map(({ item, reason }) => (
+              <li
+                key={item.id}
+                className="text-sm text-text-muted"
+              >
+                <span className="font-medium text-foreground">
+                  {item.product_name}
+                </span>
+                {reason === "blocked"
+                  ? " — every brand of this item is blocked in your preferences."
+                  : " — no matching prices found."}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
     </div>
   );

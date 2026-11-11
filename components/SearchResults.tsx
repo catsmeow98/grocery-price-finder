@@ -1,10 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import ProductCard from "@/components/ProductCard";
 import FilterBar from "@/components/FilterBar";
 import BrandToggle from "@/components/BrandToggle";
+import { usePreferences } from "@/components/preferences/usePreferences";
+import { withNext } from "@/lib/redirect";
+import type { Preference } from "@/types/shopping";
 import {
   getQuantityKey,
   formatQuantity,
@@ -18,6 +22,8 @@ type Product = {
   unit: string;
   unit_type: string;
   price: number;
+  regular_price?: number;
+  sale_price?: number | null;
   stores?: {
     name: string;
     city: string;
@@ -33,6 +39,31 @@ export default function SearchResults({
   products,
   search,
 }: SearchResultsProps) {
+  const router = useRouter();
+
+  const { map: preferences, loggedIn, updatePreference } =
+    usePreferences();
+
+  function handleSetPreference(
+    productName: string,
+    brand: string,
+    preference: Preference | null
+  ) {
+    // Logged out: log in first, then come back here.
+    if (loggedIn === false) {
+      router.push(
+        withNext(
+          "/login",
+          window.location.pathname +
+            window.location.search
+        )
+      );
+      return;
+    }
+
+    updatePreference(productName, brand, preference);
+  }
+
   // --------------------------------
   // Filter state
   // --------------------------------
@@ -260,6 +291,8 @@ export default function SearchResults({
                 name={group.name}
                 products={group.products}
                 separateBrands={!compareBrands}
+                preferences={preferences}
+                onSetPreference={handleSetPreference}
               />
             ))}
           </div>

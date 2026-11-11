@@ -22,8 +22,33 @@ export type Product = {
   } | null;
 };
 
+export type Preference = "preferred" | "blocked";
+
+/* key = preferenceKey(productName, brand) */
+export type PreferenceMap = Record<string, Preference>;
+
+export type PlanMode = "cheapest" | "preferred";
+
+/*
+ * Why this product was chosen:
+ *   cheapest  - lowest total price
+ *   preferred - cheapest among the user's preferred brands
+ *   fallback  - preferred mode, but no preferred brand
+ *               available, so the cheapest was used
+ */
+export type ResultBasis =
+  | "cheapest"
+  | "preferred"
+  | "fallback";
+
+export type SkippedItem = {
+  item: ShoppingListItem;
+  reason: "blocked" | "no_match";
+};
+
 export type ShoppingResult = {
   item: ShoppingListItem;
+  basis?: ResultBasis;
   product: Product;
   packagesNeeded: number;
   totalPrice: number;
@@ -53,6 +78,7 @@ export type RequestedQuantityOption = {
 
 export type ShoppingPlan = {
   results: ShoppingResult[];
+  skipped: SkippedItem[];
   storeGroups: StoreGroup[];
   total: number;
 };

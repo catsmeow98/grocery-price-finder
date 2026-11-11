@@ -1,4 +1,7 @@
 import AddToListButton from "@/components/shopping-list/AddToListButton";
+import BrandPreferenceButtons from "@/components/preferences/BrandPreferenceButtons";
+import { getPreference } from "@/lib/preferenceUtils";
+import type { Preference, PreferenceMap } from "@/types/shopping";
 import {
   getUnitPrice,
   formatUnitPrice,
@@ -12,6 +15,8 @@ type Product = {
   unit: string;
   unit_type: string;
   price: number;
+  regular_price?: number;
+  sale_price?: number | null;
   stores?: {
     name: string;
     city: string;
@@ -22,12 +27,20 @@ type ProductCardProps = {
   name: string;
   products: Product[];
   separateBrands?: boolean;
+  preferences?: PreferenceMap;
+  onSetPreference?: (
+    productName: string,
+    brand: string,
+    preference: Preference | null
+  ) => void;
 };
 
 export default function ProductCard({
   name,
   products,
   separateBrands = false,
+  preferences,
+  onSetPreference,
 }: ProductCardProps) {
   /*
    * Calculate unit price for every option.
@@ -57,7 +70,20 @@ export default function ProductCard({
       (b.unitPrice?.pricePerUnit ?? Infinity)
   );
 
-  const bestProduct = sortedProducts[0];
+  /*
+   * Blocked brands are never the "best value".
+   */
+  const isBlocked = (product: Product) =>
+    getPreference(
+      preferences,
+      product.name,
+      product.brand
+    ) === "blocked";
+
+  const bestProduct =
+    sortedProducts.find(
+      (product) => !isBlocked(product)
+    ) ?? sortedProducts[0];
 
   /*
    * Dollar savings only applies when all
@@ -156,8 +182,17 @@ export default function ProductCard({
 
       {/* Product options */}
       <div className="space-y-2">
-        {sortedProducts.map((product, index) => {
-          const isBestDeal = index === 0;
+        {sortedProducts.map((product) => {
+          const isBestDeal =
+            product.id === bestProduct?.id;
+
+          const preference = getPreference(
+            preferences,
+            product.name,
+            product.brand
+          );
+
+          const onSale = Boolean(product.sale_price);
 
           return (
             <div
@@ -166,7 +201,7 @@ export default function ProductCard({
                 isBestDeal
                   ? "border-accent-border bg-accent-background"
                   : "border-border-subtle bg-background/30"
-              }`}
+              } ${preference === "blocked" ? "opacity-50" : ""}`}
             >
               {/* Store information */}
               <div className="flex items-center gap-3">
@@ -199,6 +234,12 @@ export default function ProductCard({
                         : ""}
                     {!separateBrands &&
                       product.stores?.name}
+
+                    {onSale && (
+                      <span className="ml-2 rounded-full border border-accent-border bg-accent-background px-2 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wide text-accent">
+                        Sale
+                      </span>
+                    )}
                   </p>
 
                   {/* Quantity / City */}
@@ -209,11 +250,35 @@ export default function ProductCard({
                       ? ` · ${product.stores.city}`
                       : ""}
                   </p>
+
+                  {product.brand && onSetPreference && (
+                    <BrandPreferenceButtons
+                      brand={product.brand}
+                      preference={preference}
+                      onChange={(value) =>
+                        onSetPreference(
+                          product.name,
+                          product.brand as string,
+                          value
+                        )
+                      }
+                    />
+                  )}
                 </div>
               </div>
 
               {/* Price information */}
               <div className="text-right">
+                {onSale &&
+                  product.regular_price !== undefined && (
+                    <p className="text-xs text-text-muted line-through">
+                      $
+                      {Number(
+                        product.regular_price
+                      ).toFixed(2)}
+                    </p>
+                  )}
+
                 <p
                   className={`text-lg font-semibold ${
                     isBestDeal

@@ -74,7 +74,8 @@ export async function updateSession(
 
   const isProtected =
     pathname.startsWith("/shopping-list") ||
-    pathname.startsWith("/shopping-plan");
+    pathname.startsWith("/shopping-plan") ||
+    pathname.startsWith("/preferences");
 
   if (!isLoggedIn && isProtected) {
     const url =

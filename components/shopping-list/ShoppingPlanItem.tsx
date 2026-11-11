@@ -27,11 +27,32 @@ export default function ShoppingPlanItem({
 
           {result.product.unit}
         </p>
+
+        {result.basis === "preferred" && (
+          <p className="mt-1 text-xs font-medium text-accent">
+            ♥ Preferred brand
+          </p>
+        )}
+
+        {result.basis === "fallback" && (
+          <p className="mt-1 text-xs text-text-muted">
+            No preferred brand available, so we chose
+            the cheapest.
+          </p>
+        )}
       </div>
 
-      <p className="font-semibold text-foreground">
-        ${result.totalPrice.toFixed(2)}
-      </p>
+      <div className="text-right">
+        <p className="font-semibold text-foreground">
+          ${result.totalPrice.toFixed(2)}
+        </p>
+
+        {result.product.sale_price ? (
+          <span className="rounded-full border border-accent-border bg-accent-background px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent">
+            Sale
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }

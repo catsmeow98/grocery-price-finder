@@ -52,6 +52,13 @@ Last updated: 2026-11-11
 - "+ Add to list" button on each search card (`components/shopping-list/AddToListButton.tsx`): adds 1 lb / 1 gal (weight/volume) or the smallest package count (e.g. 12 eggs); checks duplicates; logged-out users are sent to login and returned to the same search page
 - Login/signup return you to the page you were headed to: proxy adds `?next=<path>`, `lib/redirect.ts` only allows in-site paths; default after login is /shopping-list
 
+## Done 2026-11-11 (sale badge + brand preferences; UI untested, planner logic tested with a script)
+- Sale badge + struck-through regular price on search cards and a Sale pill in the plan
+- Brand preferences per item + brand: "♡ Prefer" / "⊘ Block" buttons on each search row; `/preferences` page lists and removes them; table `product_preferences` (RLS, own rows) via `supabase/07_preferences.sql` (OWNER MUST RUN)
+- Plan prompts "Cheapest" or "My preferred brands" each time it opens, with a switch afterwards. Blocked brands are never used in either mode; preferred mode uses preferred brands when available, else cheapest with a note; fully blocked or unmatched items appear under "Not included"
+- Blocked brands are never starred "Best value" on cards
+- Design choice to revisit: the cheapest/preferred prompt shows every visit (not remembered)
+
 ## Next (in order)
 1. Run `supabase/01_security.sql`, then `supabase/02_sample_data.sql` in the Supabase SQL Editor
 2. `npm install`, `npm run build`, `npm run dev`; fix any errors
@@ -59,7 +66,7 @@ Last updated: 2026-11-11
 4. Add real prices for the 175 catalog products that have none (they are real products: Meijer/Kirkland/etc.). Needs updated CSV importer
 5. (done) Verify Vercel production
 6. Later: real prices (CSV importer to products + prices layout)
-   Ideas: price-history chart, mobile polish, auto-add the item the user clicked before being sent to login
+   Ideas: price-history chart (skipped for now by owner), mobile polish, auto-add the item the user clicked before being sent to login
 7. Update this file and commit after every working step
 
 ## Known issues / risks

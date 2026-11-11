@@ -2,10 +2,17 @@ import {
   getBestPackageCombination,
 } from "@/lib/priceUtils";
 
+import { getPreference } from "@/lib/preferenceUtils";
+
 import type {
+  PlanMode,
+  PreferenceMap,
   Product,
+  ResultBasis,
   ShoppingOption,
+  ShoppingPlan,
   ShoppingResult,
+  SkippedItem,
   StoreGroup,
 } from "@/types/shopping";
 
@@ -133,64 +140,105 @@ export function findCheapestOption(
   )[0];
 }
 
+export type PlanOptions = {
+  mode: PlanMode;
+  preferences: PreferenceMap;
+};
+
 /**
- * Build the complete shopping plan.
+ * Build the shopping results.
  *
  * For every grocery-list item:
  *
  * 1. Find matching products
- * 2. Calculate quantity-aware options
- * 3. Select the cheapest option
- * 4. Return the recommended product
+ * 2. Remove blocked brands (always, in both modes)
+ * 3. "preferred" mode: keep only preferred brands, when
+ *    any are available; otherwise fall back to cheapest
+ * 4. Pick the cheapest of what is left
  */
 export function buildShoppingResults(
   items: ShoppingListItem[],
-  products: Product[]
-): ShoppingResult[] {
+  products: Product[],
+  options: PlanOptions = {
+    mode: "cheapest",
+    preferences: {},
+  }
+): {
+  results: ShoppingResult[];
+  skipped: SkippedItem[];
+} {
   const results: ShoppingResult[] = [];
+  const skipped: SkippedItem[] = [];
+
+  const prefOf = (product: Product) =>
+    getPreference(
+      options.preferences,
+      product.name,
+      product.brand
+    );
 
   for (const item of items) {
-    const matches =
-      findProductMatches(
-        products,
-        item.product_name
-      );
+    const matches = findProductMatches(
+      products,
+      item.product_name
+    );
 
     if (matches.length === 0) {
+      skipped.push({ item, reason: "no_match" });
       continue;
     }
 
-    const options =
+    const allowed = matches.filter(
+      (product) => prefOf(product) !== "blocked"
+    );
+
+    if (allowed.length === 0) {
+      skipped.push({ item, reason: "blocked" });
+      continue;
+    }
+
+    let candidates = allowed;
+    let basis: ResultBasis = "cheapest";
+
+    if (options.mode === "preferred") {
+      const preferred = allowed.filter(
+        (product) => prefOf(product) === "preferred"
+      );
+
+      if (preferred.length > 0) {
+        candidates = preferred;
+        basis = "preferred";
+      } else {
+        basis = "fallback";
+      }
+    }
+
+    const shoppingOptions =
       calculateShoppingOptions(
-        matches,
+        candidates,
         Number(item.quantity),
         item.unit
       );
 
-    if (options.length === 0) {
-      continue;
-    }
-
     const cheapest =
-      findCheapestOption(options);
+      findCheapestOption(shoppingOptions);
 
     if (!cheapest) {
+      skipped.push({ item, reason: "no_match" });
       continue;
     }
 
     results.push({
       item,
+      basis,
       product: cheapest.product,
-      packagesNeeded:
-        cheapest.packagesNeeded,
-      totalQuantity:
-        cheapest.totalQuantity,
-      totalPrice:
-        cheapest.totalPrice,
+      packagesNeeded: cheapest.packagesNeeded,
+      totalQuantity: cheapest.totalQuantity,
+      totalPrice: cheapest.totalPrice,
     });
   }
 
-  return results;
+  return { results, skipped };
 }
 
 /**
@@ -250,29 +298,31 @@ export function calculateShoppingTotal(
   );
 }
 
-export async function getShoppingPlanData(
+export function computeShoppingPlan(
   items: ShoppingListItem[],
-  products: Product[]
-) {
-  const results =
-    buildShoppingResults(
-      items,
-      products
-    );
+  products: Product[],
+  options?: PlanOptions
+): ShoppingPlan {
+  const { results, skipped } = buildShoppingResults(
+    items,
+    products,
+    options
+  );
 
-  const storeGroups =
-    groupResultsByStore(
-      results
-    );
-
-  const total =
-    calculateShoppingTotal(
-      storeGroups
-    );
+  const storeGroups = groupResultsByStore(results);
 
   return {
     results,
+    skipped,
     storeGroups,
-    total,
+    total: calculateShoppingTotal(storeGroups),
   };
+}
+
+export async function getShoppingPlanData(
+  items: ShoppingListItem[],
+  products: Product[],
+  options?: PlanOptions
+) {
+  return computeShoppingPlan(items, products, options);
 }

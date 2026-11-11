@@ -22,6 +22,10 @@ import type { Preference } from "@/types/shopping";
 export function usePreferences() {
   const [rows, setRows] = useState<PreferenceRow[]>([]);
 
+  const [problem, setProblem] = useState<
+    string | null
+  >(null);
+
   const [loggedIn, setLoggedIn] = useState<
     boolean | undefined
   >(undefined);
@@ -47,6 +51,12 @@ export function usePreferences() {
           "Unable to load preferences:",
           error
         );
+
+        if (active) {
+          setProblem(
+            "Your brand preferences could not be loaded, so they are not being applied."
+          );
+        }
 
         if (active) {
           setLoggedIn((current) =>
@@ -96,8 +106,13 @@ export function usePreferences() {
     // ...then save; reload the real data if saving fails.
     try {
       await setPreference(productName, brand, preference);
+      setProblem(null);
     } catch (error) {
       console.error("Unable to save preference:", error);
+
+      setProblem(
+        "Your preference could not be saved, so it will not be used in your shopping plan."
+      );
 
       try {
         setRows(await getPreferenceRows());
@@ -107,5 +122,5 @@ export function usePreferences() {
     }
   }
 
-  return { map, loggedIn, updatePreference };
+  return { map, loggedIn, updatePreference, problem };
 }

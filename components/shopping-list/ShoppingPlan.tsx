@@ -46,6 +46,9 @@ export default function ShoppingPlan({
    * null = the customer has not chosen yet,
    * so we ask them first.
    */
+  const [prefsWarning, setPrefsWarning] =
+    useState(false);
+
   const [mode, setMode] =
     useState<PlanMode | null>(null);
 
@@ -83,6 +86,8 @@ export default function ShoppingPlan({
          * loaded, the plan still works without them.
          */
         try {
+          setPrefsWarning(false);
+
           setPreferences(
             toPreferenceMap(
               await getPreferenceRows()
@@ -95,6 +100,7 @@ export default function ShoppingPlan({
           );
 
           setPreferences({});
+          setPrefsWarning(true);
         }
       } catch (err) {
         console.error(err);
@@ -184,12 +190,22 @@ export default function ShoppingPlan({
     );
   }
 
+  const warning = prefsWarning ? (
+    <p className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+      Your brand preferences could not be loaded, so
+      blocked and preferred brands are NOT applied to
+      this plan.
+    </p>
+  ) : null;
+
   /*
    * Ask how to build the plan before showing it.
    */
   if (mode === null) {
     return (
       <div className="rounded-2xl border border-border bg-surface p-6">
+        {warning}
+
         <p className="text-sm font-semibold uppercase tracking-wider text-primary">
           Build your shopping plan
         </p>
@@ -255,6 +271,7 @@ export default function ShoppingPlan({
 
   return (
     <div className="space-y-8">
+      {warning}
 
       {/* Plan type */}
       <div className="flex flex-wrap items-center gap-3">

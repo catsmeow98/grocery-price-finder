@@ -41,8 +41,12 @@ export default function SearchResults({
 }: SearchResultsProps) {
   const router = useRouter();
 
-  const { map: preferences, loggedIn, updatePreference } =
-    usePreferences();
+  const {
+    map: preferences,
+    loggedIn,
+    updatePreference,
+    problem: preferenceProblem,
+  } = usePreferences();
 
   function handleSetPreference(
     productName: string,
@@ -253,6 +257,12 @@ export default function SearchResults({
 
   return (
     <>
+      {preferenceProblem && (
+        <p className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          {preferenceProblem}
+        </p>
+      )}
+
       {/* Results header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-text-muted">

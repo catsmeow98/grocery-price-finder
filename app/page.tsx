@@ -2,7 +2,6 @@ import { supabase } from "@/lib/supabase";
 import { getProductsWithPrices } from "@/lib/products";
 import type { Product } from "@/types/shopping";
 
-import Header from "@/components/Header";
 import SearchBar from "@/components/SearchBar";
 import ProductCard from "@/components/ProductCard";
 import SectionHeading from "@/components/SectionHeading";
@@ -67,8 +66,6 @@ export default async function Home({
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <Header />
-
       {/* Hero */}
       <section className="px-6 pb-14 pt-16">
         <div className="mx-auto max-w-4xl text-center">

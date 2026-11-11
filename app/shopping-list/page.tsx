@@ -7,8 +7,6 @@ import { getCurrentUser } from "@/lib/auth";
 
 import GroceryList from "@/components/shopping-list/GroceryList";
 import ShoppingPlan from "@/components/shopping-list/ShoppingPlan";
-import LogoutButton from "@/components/auth/LogoutButton";
-import Navbar from "@/components/navigation/navbar";
 
 export default function ShoppingListPage() {
   const router = useRouter();
@@ -66,17 +64,12 @@ export default function ShoppingListPage() {
 
   return (
     <main className="min-h-screen bg-background">
-      <Navbar />
       <div className="mx-auto max-w-5xl px-6 py-12">
 
         {/* Header */}
         <div className="mb-10 flex items-start justify-between gap-6">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-wider text-primary">
-              Smart Shopping
-            </p>
-
-            <h1 className="mt-2 text-4xl font-bold tracking-tight text-foreground">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground">
               Grocery List
             </h1>
 

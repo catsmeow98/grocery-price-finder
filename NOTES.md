@@ -42,13 +42,20 @@ Last updated: 2026-11-11
 - Home page shows real "Prices as of <date>"
 - README rewritten; added `supabase/04_find_orphan_products.sql`
 
+## Done 2026-11-11 (navigation; untested)
+- Vercel production site confirmed working by owner; sample data is the chosen data path for now (option A); 175 catalog products stay unpriced until real prices are wanted
+- One shared `components/navigation/SiteHeader.tsx` in `app/layout.tsx` on every page: logo, Search / Grocery List / Shopping Plan, Log in + Sign up (logged out) or email + Log out (logged in), mobile Menu button. Old Header and Navbar deleted; fake "Warren, MI" button removed
+- Brand name is "PriceScout" (constant `SITE_NAME` in SiteHeader; login/signup pages and page title updated)
+- Shopping Plan page now has a heading and an "Edit grocery list" link
+
 ## Next (in order)
 1. Run `supabase/01_security.sql`, then `supabase/02_sample_data.sql` in the Supabase SQL Editor
 2. `npm install`, `npm run build`, `npm run dev`; fix any errors
 3. Click-test: search, add items to a list (log in first), open shopping plan
 4. Add real prices for the 175 catalog products that have none (they are real products: Meijer/Kirkland/etc.). Needs updated CSV importer
-5. Verify Vercel production (env vars set, login works)
-6. Commit the CSV importer; update it to the products + prices layout
+5. (done) Verify Vercel production
+6. Later: real prices (CSV importer to products + prices layout)
+   Ideas: "Add to list" button on product cards, price-history chart, mobile polish, redirect back to the page you came from after login
 7. Update this file and commit after every working step
 
 ## Known issues / risks

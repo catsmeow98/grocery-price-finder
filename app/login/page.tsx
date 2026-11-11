@@ -8,7 +8,7 @@ export default function LoginPage() {
       <div className="mx-auto max-w-md">
         <div className="mb-8 text-center">
           <p className="text-sm font-semibold uppercase tracking-wider text-primary">
-            Smart Shopping
+            PriceScout
           </p>
 
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">

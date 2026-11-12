@@ -80,10 +80,10 @@ export default function ProductCard({
       product.brand
     ) === "blocked";
 
-  const bestProduct =
-    sortedProducts.find(
-      (product) => !isBlocked(product)
-    ) ?? sortedProducts[0];
+  // If every option is blocked, nothing is marked best value.
+  const bestProduct = sortedProducts.find(
+    (product) => !isBlocked(product)
+  );
 
   /*
    * Dollar savings only applies when all

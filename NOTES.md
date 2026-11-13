@@ -62,6 +62,11 @@ Last updated: 2026-11-11
 ## Done 2026-11-11 (simplify)
 - Removed the separate Shopping Plan page/nav item: the plan already shows under the list on `/shopping-list`. `/shopping-plan` now redirects there
 
+## Done 2026-11-13 (swap + store limit; engine tested by script, UI untested)
+- Swap: each plan item has a "Swap" link listing every product for that item (any brand/store, cheapest first, price difference shown; blocked/preferred tags). Choice is kept for the visit only (not saved) and works in both plan modes; "Reset to automatic choice" undoes it
+- Store limit: three cards compare the plan for any number of stores, up to 2 stores, and 1 store (total, store names, items not sold there). Best subset = fewest unavailable items, then lowest total, then fewest stores. Swapped items force their stores; a limit smaller than that is disabled
+- Engine in `lib/shoppingUtils.ts` (`computePlanVariants`, `getSwapAlternatives`); preferred mode falls back per store set when the preferred brand isn't in the chosen stores
+
 ## Next (in order)
 1. Run `supabase/01_security.sql`, then `supabase/02_sample_data.sql` in the Supabase SQL Editor
 2. `npm install`, `npm run build`, `npm run dev`; fix any errors

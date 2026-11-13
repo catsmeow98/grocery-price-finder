@@ -1,15 +1,31 @@
 "use client";
 
-import type { StoreGroup } from "@/types/shopping";
+import type {
+  PreferenceMap,
+  ShoppingOption,
+  StoreGroup,
+} from "@/types/shopping";
+
+import type { ShoppingListItem } from "@/lib/database";
 
 import ShoppingPlanItem from "./ShoppingPlanItem";
 
 type ShoppingPlanStoreProps = {
   store: StoreGroup;
+  preferences: PreferenceMap;
+  getAlternatives: (
+    item: ShoppingListItem
+  ) => ShoppingOption[];
+  onSwap: (itemId: string, productId: string) => void;
+  onResetSwap: (itemId: string) => void;
 };
 
 export default function ShoppingPlanStore({
   store,
+  preferences,
+  getAlternatives,
+  onSwap,
+  onResetSwap,
 }: ShoppingPlanStoreProps) {
   return (
     <div className="rounded-2xl border border-border bg-surface p-6">
@@ -51,6 +67,10 @@ export default function ShoppingPlanStore({
           <ShoppingPlanItem
             key={result.item.id}
             result={result}
+            preferences={preferences}
+            getAlternatives={getAlternatives}
+            onSwap={onSwap}
+            onResetSwap={onResetSwap}
           />
         ))}
 

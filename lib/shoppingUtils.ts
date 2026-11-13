@@ -143,35 +143,52 @@ export function findCheapestOption(
 export type PlanOptions = {
   mode: PlanMode;
   preferences: PreferenceMap;
+  /* grocery-list item id -> id of the product the customer chose */
+  overrides?: Record<string, string>;
+  /* null / undefined = shop at as many stores as needed */
+  maxStores?: number | null;
 };
 
-/**
- * Build the shopping results.
+/*
+ * One list item and the products it could be bought as.
  *
- * For every grocery-list item:
- *
- * 1. Find matching products
- * 2. "cheapest" mode: ignore all brand preferences and
- *    pick the lowest price
- * 3. "preferred" mode: remove blocked brands, then keep
- *    only preferred brands when any are available;
- *    otherwise fall back to the cheapest allowed option
- * 4. Pick the cheapest of what is left
+ * tiers are tried in order. In "preferred" mode the first
+ * tier holds the preferred brands and the second holds
+ * every allowed brand. In "cheapest" mode there is one tier.
  */
-export function buildShoppingResults(
+type Tier = {
+  basis: ResultBasis;
+  options: ShoppingOption[];
+};
+
+type ItemChoice = {
+  item: ShoppingListItem;
+  skip?: "blocked" | "no_match";
+  pinned?: ShoppingOption;
+  tiers: Tier[];
+};
+
+function storeKey(product: Product): string {
+  return (
+    product.store_id ??
+    `${product.stores?.name}-${product.stores?.city}`
+  );
+}
+
+/**
+ * Work out, for every grocery-list item, which products
+ * could be used (before deciding on stores).
+ *
+ * - "cheapest" mode ignores brand preferences.
+ * - "preferred" mode removes blocked brands and tries
+ *   preferred brands first.
+ * - Items the customer swapped are pinned to their choice.
+ */
+function buildItemChoices(
   items: ShoppingListItem[],
   products: Product[],
-  options: PlanOptions = {
-    mode: "cheapest",
-    preferences: {},
-  }
-): {
-  results: ShoppingResult[];
-  skipped: SkippedItem[];
-} {
-  const results: ShoppingResult[] = [];
-  const skipped: SkippedItem[] = [];
-
+  options: PlanOptions
+): ItemChoice[] {
   const prefOf = (product: Product) =>
     getPreference(
       options.preferences,
@@ -179,18 +196,39 @@ export function buildShoppingResults(
       product.brand
     );
 
-  for (const item of items) {
+  return items.map((item): ItemChoice => {
+    const quantity = Number(item.quantity);
+
     const matches = findProductMatches(
       products,
       item.product_name
     );
 
     if (matches.length === 0) {
-      skipped.push({ item, reason: "no_match" });
-      continue;
+      return { item, skip: "no_match", tiers: [] };
     }
 
-    // Blocked brands only matter in "preferred" mode.
+    // The customer picked a specific product.
+    const overrideId = options.overrides?.[item.id];
+
+    if (overrideId) {
+      const chosen = matches.find(
+        (product) => product.id === overrideId
+      );
+
+      if (chosen) {
+        const [pinned] = calculateShoppingOptions(
+          [chosen],
+          quantity,
+          item.unit
+        );
+
+        if (pinned) {
+          return { item, pinned, tiers: [] };
+        }
+      }
+    }
+
     const allowed =
       options.mode === "preferred"
         ? matches.filter(
@@ -199,52 +237,245 @@ export function buildShoppingResults(
         : matches;
 
     if (allowed.length === 0) {
-      skipped.push({ item, reason: "blocked" });
+      return { item, skip: "blocked", tiers: [] };
+    }
+
+    const tiers: Tier[] = [];
+
+    if (options.mode === "preferred") {
+      tiers.push({
+        basis: "preferred",
+        options: calculateShoppingOptions(
+          allowed.filter(
+            (product) => prefOf(product) === "preferred"
+          ),
+          quantity,
+          item.unit
+        ),
+      });
+
+      tiers.push({
+        basis: "fallback",
+        options: calculateShoppingOptions(
+          allowed,
+          quantity,
+          item.unit
+        ),
+      });
+    } else {
+      tiers.push({
+        basis: "cheapest",
+        options: calculateShoppingOptions(
+          allowed,
+          quantity,
+          item.unit
+        ),
+      });
+    }
+
+    const usable = tiers.filter(
+      (tier) => tier.options.length > 0
+    );
+
+    if (usable.length === 0) {
+      return { item, skip: "no_match", tiers: [] };
+    }
+
+    return { item, tiers: usable };
+  });
+}
+
+function toResult(
+  item: ShoppingListItem,
+  option: ShoppingOption,
+  basis: ResultBasis
+): ShoppingResult {
+  return {
+    item,
+    basis,
+    product: option.product,
+    packagesNeeded: option.packagesNeeded,
+    totalQuantity: option.totalQuantity,
+    totalPrice: option.totalPrice,
+  };
+}
+
+/*
+ * Buy every item as cheaply as possible, but only from the
+ * given stores (null = any store). Items that none of those
+ * stores carry are reported as "not_at_stores".
+ */
+function evaluateStores(
+  choices: ItemChoice[],
+  stores: Set<string> | null
+): { results: ShoppingResult[]; skipped: SkippedItem[] } {
+  const results: ShoppingResult[] = [];
+  const skipped: SkippedItem[] = [];
+
+  for (const choice of choices) {
+    if (choice.skip) {
+      skipped.push({
+        item: choice.item,
+        reason: choice.skip,
+      });
       continue;
     }
 
-    let candidates = allowed;
-    let basis: ResultBasis = "cheapest";
-
-    if (options.mode === "preferred") {
-      const preferred = allowed.filter(
-        (product) => prefOf(product) === "preferred"
+    if (choice.pinned) {
+      results.push(
+        toResult(choice.item, choice.pinned, "swapped")
       );
+      continue;
+    }
 
-      if (preferred.length > 0) {
-        candidates = preferred;
-        basis = "preferred";
-      } else {
-        basis = "fallback";
+    let chosen: ShoppingResult | null = null;
+
+    for (const tier of choice.tiers) {
+      const pool = stores
+        ? tier.options.filter((option) =>
+            stores.has(storeKey(option.product))
+          )
+        : tier.options;
+
+      const best = findCheapestOption(pool);
+
+      if (best) {
+        chosen = toResult(choice.item, best, tier.basis);
+        break;
       }
     }
 
-    const shoppingOptions =
-      calculateShoppingOptions(
-        candidates,
-        Number(item.quantity),
-        item.unit
-      );
-
-    const cheapest =
-      findCheapestOption(shoppingOptions);
-
-    if (!cheapest) {
-      skipped.push({ item, reason: "no_match" });
-      continue;
+    if (chosen) {
+      results.push(chosen);
+    } else {
+      skipped.push({
+        item: choice.item,
+        reason: "not_at_stores",
+      });
     }
-
-    results.push({
-      item,
-      basis,
-      product: cheapest.product,
-      packagesNeeded: cheapest.packagesNeeded,
-      totalQuantity: cheapest.totalQuantity,
-      totalPrice: cheapest.totalPrice,
-    });
   }
 
   return { results, skipped };
+}
+
+function assemblePlan(evaluated: {
+  results: ShoppingResult[];
+  skipped: SkippedItem[];
+}): ShoppingPlan {
+  const storeGroups = groupResultsByStore(
+    evaluated.results
+  );
+
+  return {
+    results: evaluated.results,
+    skipped: evaluated.skipped,
+    storeGroups,
+    total: calculateShoppingTotal(storeGroups),
+  };
+}
+
+function* combinations<T>(
+  values: T[],
+  size: number,
+  start = 0,
+  current: T[] = []
+): Generator<T[]> {
+  if (current.length === size) {
+    yield [...current];
+    return;
+  }
+
+  for (let i = start; i < values.length; i++) {
+    current.push(values[i]);
+    yield* combinations(values, size, i + 1, current);
+    current.pop();
+  }
+}
+
+/*
+ * The best plan that uses at most `maxStores` stores.
+ *
+ * "Best" = fewest items that cannot be bought, then the
+ * lowest total, then the fewest stores actually visited.
+ * Returns null if the customer's swapped items already
+ * sit in more than `maxStores` stores.
+ */
+function planWithStoreLimit(
+  choices: ItemChoice[],
+  maxStores: number | null
+): ShoppingPlan | null {
+  if (maxStores === null) {
+    return assemblePlan(evaluateStores(choices, null));
+  }
+
+  const pinnedStores = new Set(
+    choices
+      .filter((choice) => choice.pinned)
+      .map((choice) => storeKey(choice.pinned!.product))
+  );
+
+  if (pinnedStores.size > maxStores) {
+    return null;
+  }
+
+  const others = new Set<string>();
+
+  for (const choice of choices) {
+    for (const tier of choice.tiers) {
+      for (const option of tier.options) {
+        const key = storeKey(option.product);
+
+        if (!pinnedStores.has(key)) {
+          others.add(key);
+        }
+      }
+    }
+  }
+
+  const pickCount = Math.min(
+    maxStores - pinnedStores.size,
+    others.size
+  );
+
+  let best: ShoppingPlan | null = null;
+  let bestScore: [number, number, number] | null = null;
+
+  for (const combo of combinations(
+    Array.from(others),
+    pickCount
+  )) {
+    const evaluated = evaluateStores(
+      choices,
+      new Set([...pinnedStores, ...combo])
+    );
+
+    const plan = assemblePlan(evaluated);
+
+    const missing = evaluated.skipped.filter(
+      (entry) => entry.reason === "not_at_stores"
+    ).length;
+
+    const score: [number, number, number] = [
+      missing,
+      plan.total,
+      plan.storeGroups.length,
+    ];
+
+    const better =
+      bestScore === null ||
+      score[0] < bestScore[0] ||
+      (score[0] === bestScore[0] &&
+        (score[1] < bestScore[1] - 1e-9 ||
+          (Math.abs(score[1] - bestScore[1]) <= 1e-9 &&
+            score[2] < bestScore[2])));
+
+    if (better) {
+      best = plan;
+      bestScore = score;
+    }
+  }
+
+  return best;
 }
 
 /**
@@ -304,25 +535,70 @@ export function calculateShoppingTotal(
   );
 }
 
+const DEFAULT_OPTIONS: PlanOptions = {
+  mode: "cheapest",
+  preferences: {},
+};
+
+/**
+ * The shopping plan for the given options.
+ * (maxStores is honoured when possible; otherwise all stores.)
+ */
 export function computeShoppingPlan(
   items: ShoppingListItem[],
   products: Product[],
-  options?: PlanOptions
+  options: PlanOptions = DEFAULT_OPTIONS
 ): ShoppingPlan {
-  const { results, skipped } = buildShoppingResults(
-    items,
-    products,
-    options
-  );
+  const choices = buildItemChoices(items, products, options);
 
-  const storeGroups = groupResultsByStore(results);
+  return (
+    planWithStoreLimit(choices, options.maxStores ?? null) ??
+    planWithStoreLimit(choices, null)!
+  );
+}
+
+/**
+ * The same shopping list planned three ways, so the
+ * customer can compare: any number of stores, at most 2
+ * stores, and 1 store. A limit is null when the customer's
+ * swapped items already need more stores than that.
+ */
+export function computePlanVariants(
+  items: ShoppingListItem[],
+  products: Product[],
+  options: PlanOptions = DEFAULT_OPTIONS,
+  limits: number[] = [2, 1]
+): {
+  any: ShoppingPlan;
+  byLimit: Record<number, ShoppingPlan | null>;
+} {
+  const choices = buildItemChoices(items, products, options);
+
+  const byLimit: Record<number, ShoppingPlan | null> = {};
+
+  for (const limit of limits) {
+    byLimit[limit] = planWithStoreLimit(choices, limit);
+  }
 
   return {
-    results,
-    skipped,
-    storeGroups,
-    total: calculateShoppingTotal(storeGroups),
+    any: planWithStoreLimit(choices, null)!,
+    byLimit,
   };
+}
+
+/**
+ * Every product (any brand, any store) that could replace
+ * the product chosen for a list item, cheapest first.
+ */
+export function getSwapAlternatives(
+  item: ShoppingListItem,
+  products: Product[]
+): ShoppingOption[] {
+  return calculateShoppingOptions(
+    findProductMatches(products, item.product_name),
+    Number(item.quantity),
+    item.unit
+  ).sort((a, b) => a.totalPrice - b.totalPrice);
 }
 
 export async function getShoppingPlanData(

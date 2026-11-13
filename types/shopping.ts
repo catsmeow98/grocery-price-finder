@@ -35,15 +35,17 @@ export type PlanMode = "cheapest" | "preferred";
  *   preferred - cheapest among the user's preferred brands
  *   fallback  - preferred mode, but no preferred brand
  *               available, so the cheapest was used
+ *   swapped   - the customer picked this product by hand
  */
 export type ResultBasis =
   | "cheapest"
   | "preferred"
-  | "fallback";
+  | "fallback"
+  | "swapped";
 
 export type SkippedItem = {
   item: ShoppingListItem;
-  reason: "blocked" | "no_match";
+  reason: "blocked" | "no_match" | "not_at_stores";
 };
 
 export type ShoppingResult = {

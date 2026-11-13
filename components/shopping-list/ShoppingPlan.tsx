@@ -12,13 +12,17 @@ import {
   type ShoppingListItem,
 } from "@/lib/database";
 
-import { computeShoppingPlan } from "@/lib/shoppingUtils";
+import {
+  computePlanVariants,
+  getSwapAlternatives,
+} from "@/lib/shoppingUtils";
 import {
   getPreferenceRows,
   toPreferenceMap,
 } from "@/lib/preferences";
 
 import type {
+  ShoppingPlan as ShoppingPlanData,
   PlanMode,
   PreferenceMap,
   Product,
@@ -48,6 +52,23 @@ export default function ShoppingPlan({
    */
   const [prefsWarning, setPrefsWarning] =
     useState(false);
+
+  /*
+   * Products the customer swapped by hand:
+   * grocery-list item id -> chosen product id.
+   * (Kept for this visit only.)
+   */
+  const [overrides, setOverrides] = useState<
+    Record<string, string>
+  >({});
+
+  /*
+   * How many stores the customer is willing to visit.
+   * null = any number of stores.
+   */
+  const [maxStores, setMaxStores] = useState<
+    1 | 2 | null
+  >(null);
 
   const [mode, setMode] =
     useState<PlanMode | null>(null);
@@ -116,16 +137,60 @@ export default function ShoppingPlan({
     loadPlanData();
   }, [refreshKey]);
 
-  const plan = useMemo(
+  /*
+   * The same list planned for any number of stores,
+   * for at most 2 stores, and for 1 store.
+   */
+  const variants = useMemo(
     () =>
       mode && items.length > 0
-        ? computeShoppingPlan(items, products, {
+        ? computePlanVariants(items, products, {
             mode,
             preferences,
+            overrides,
           })
         : null,
-    [items, products, preferences, mode]
+    [items, products, preferences, mode, overrides]
   );
+
+  const requestedPlan: ShoppingPlanData | null =
+    variants
+      ? maxStores === null
+        ? variants.any
+        : variants.byLimit[maxStores]
+      : null;
+
+  // The chosen limit may be impossible (swapped items
+  // already sit in more stores than allowed).
+  const limitUnavailable =
+    maxStores !== null &&
+    variants !== null &&
+    requestedPlan === null;
+
+  const plan = requestedPlan ?? variants?.any ?? null;
+
+  function handleSwap(
+    itemId: string,
+    productId: string
+  ) {
+    setOverrides((current) => ({
+      ...current,
+      [itemId]: productId,
+    }));
+  }
+
+  function handleResetSwap(itemId: string) {
+    setOverrides((current) => {
+      const next = { ...current };
+
+      delete next[itemId];
+
+      return next;
+    });
+  }
+
+  const getAlternatives = (item: ShoppingListItem) =>
+    getSwapAlternatives(item, products);
 
   const preferredCount = Object.values(
     preferences
@@ -307,6 +372,100 @@ export default function ShoppingPlan({
         </Link>
       </div>
 
+      {/* Store limit */}
+      {variants && (
+        <div>
+          <p className="mb-2 text-sm text-text-muted">
+            How many stores do you want to visit?
+          </p>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            {(
+              [
+                [null, "Any number of stores", variants.any],
+                [2, "Up to 2 stores", variants.byLimit[2]],
+                [1, "1 store only", variants.byLimit[1]],
+              ] as const
+            ).map(([limit, label, option]) => {
+              const selected =
+                !limitUnavailable && maxStores === limit;
+
+              const missing = option
+                ? option.skipped.filter(
+                    (entry) =>
+                      entry.reason === "not_at_stores"
+                  ).length
+                : 0;
+
+              const difference = option
+                ? option.total - variants.any.total
+                : 0;
+
+              return (
+                <button
+                  key={String(limit)}
+                  type="button"
+                  disabled={!option}
+                  aria-pressed={selected}
+                  onClick={() => setMaxStores(limit)}
+                  className={`rounded-2xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    selected
+                      ? "border-primary bg-primary/10"
+                      : "border-border bg-surface hover:bg-surface-hover"
+                  }`}
+                >
+                  <p className="text-sm font-medium text-foreground">
+                    {label}
+                  </p>
+
+                  {option ? (
+                    <>
+                      <p className="mt-1 text-xl font-bold text-foreground">
+                        ${option.total.toFixed(2)}
+                      </p>
+
+                      <p className="text-xs text-text-muted">
+                        {option.storeGroups
+                          .map((group) => group.storeName)
+                          .join(" + ") || "No stores"}
+                      </p>
+
+                      {missing > 0 ? (
+                        <p className="mt-1 text-xs text-red-400">
+                          {missing}{" "}
+                          {missing === 1 ? "item is" : "items are"}{" "}
+                          not sold there
+                        </p>
+                      ) : limit !== null &&
+                        Math.abs(difference) >= 0.005 ? (
+                        <p className="mt-1 text-xs text-text-muted">
+                          {difference > 0 ? "+" : "-"}$
+                          {Math.abs(difference).toFixed(2)}{" "}
+                          vs any number of stores
+                        </p>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="mt-1 text-xs text-text-muted">
+                      Your swapped items are in more stores
+                      than this.
+                    </p>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {limitUnavailable && (
+            <p className="mt-2 text-xs text-text-muted">
+              That store limit isn&apos;t possible with
+              your swapped items, so we&apos;re showing
+              any number of stores.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Summary */}
       <div className="rounded-2xl border border-border bg-surface p-6">
 
@@ -364,6 +523,10 @@ export default function ShoppingPlan({
             <ShoppingPlanStore
               key={`${store.storeName}-${store.city}`}
               store={store}
+              preferences={preferences}
+              getAlternatives={getAlternatives}
+              onSwap={handleSwap}
+              onResetSwap={handleResetSwap}
             />
           ))}
 
@@ -389,7 +552,9 @@ export default function ShoppingPlan({
                 </span>
                 {reason === "blocked"
                   ? " — every brand of this item is blocked in your preferences."
-                  : " — no matching prices found."}
+                  : reason === "not_at_stores"
+                    ? " — not sold at the store(s) in this plan."
+                    : " — no matching prices found."}
               </li>
             ))}
           </ul>

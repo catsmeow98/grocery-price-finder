@@ -7,6 +7,7 @@ import { getCurrentUser } from "@/lib/auth";
 
 import GroceryList from "@/components/shopping-list/GroceryList";
 import ShoppingPlan from "@/components/shopping-list/ShoppingPlan";
+import ListSwitcher from "@/components/shopping-list/ListSwitcher";
 
 export default function ShoppingListPage() {
   const router = useRouter();
@@ -16,6 +17,10 @@ export default function ShoppingListPage() {
 
   const [planRefreshKey, setPlanRefreshKey] =
     useState(0);
+
+  // Changes whenever a different saved list is opened, so
+  // the list and plan below reload from scratch.
+  const [listKey, setListKey] = useState(0);
 
   useEffect(() => {
     async function checkAuth() {
@@ -82,7 +87,14 @@ export default function ShoppingListPage() {
 
         </div>
 
+        <ListSwitcher
+          onListChanged={() =>
+            setListKey((current) => current + 1)
+          }
+        />
+
         <GroceryList
+          key={`list-${listKey}`}
           onFindBestPrices={
             refreshShoppingPlan
           }
@@ -90,6 +102,7 @@ export default function ShoppingListPage() {
 
         <div className="mt-12">
           <ShoppingPlan
+            key={`plan-${listKey}`}
             refreshKey={
               planRefreshKey
             }

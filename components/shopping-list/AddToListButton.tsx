@@ -35,6 +35,8 @@ export default function AddToListButton({
   const [status, setStatus] =
     useState<Status>("idle");
 
+  const [listName, setListName] = useState("");
+
   async function handleAdd() {
     try {
       setStatus("adding");
@@ -52,6 +54,8 @@ export default function AddToListButton({
       }
 
       const list = await getOrCreateShoppingList();
+
+      setListName(list.name);
       const items = await getShoppingListItems(list.id);
 
       const alreadyThere = items.some(
@@ -84,8 +88,8 @@ export default function AddToListButton({
       <div className="shrink-0 text-right">
         <p className="text-sm font-medium text-primary">
           {status === "added"
-            ? "✓ Added to your list"
-            : "Already on your list"}
+            ? `✓ Added to "${listName}"`
+            : `Already on "${listName}"`}
         </p>
 
         <Link

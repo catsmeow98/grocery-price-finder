@@ -17,18 +17,25 @@ export async function getProductsWithStores() {
 }
 
 
-export async function getOrCreateShoppingList() {
+export type ShoppingList = {
+  id: string;
+  name: string;
+  user_id: string;
+  created_at: string;
+  last_opened_at?: string;
+  plan_settings?: unknown;
+};
+
+async function requireUserId(): Promise<string> {
   const supabase = createClient();
-  /*
-   * Get the currently authenticated user.
-   */
+
   const {
     data: { user },
-    error: userError,
+    error,
   } = await supabase.auth.getUser();
 
-  if (userError) {
-    throw userError;
+  if (error) {
+    throw error;
   }
 
   if (!user) {
@@ -37,51 +44,191 @@ export async function getOrCreateShoppingList() {
     );
   }
 
-  /*
-   * Find this user's existing grocery list.
-   */
-  const {
-    data: existingList,
-    error: fetchError,
-  } = await supabase
+  return user.id;
+}
+
+/*
+ * All of this user's saved lists, most recently opened first.
+ * (Falls back to oldest-first if last_opened_at doesn't exist
+ * yet, so the app keeps working before the SQL is run.)
+ */
+async function fetchUserLists(
+  userId: string
+): Promise<ShoppingList[]> {
+  const supabase = createClient();
+
+  let result = await supabase
     .from("shopping_lists")
     .select("*")
-    .eq("user_id", user.id)
-    .order("created_at", {
-      ascending: true,
-    })
-    .limit(1)
-    .maybeSingle();
+    .eq("user_id", userId)
+    .order("last_opened_at", { ascending: false })
+    .order("created_at", { ascending: true });
 
-  if (fetchError) {
-    throw fetchError;
+  if (result.error) {
+    result = await supabase
+      .from("shopping_lists")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true });
   }
 
-  if (existingList) {
-    return existingList;
+  if (result.error) {
+    throw result.error;
   }
 
-  /*
-   * Create a grocery list for this user
-   * if they don't already have one.
-   */
-  const {
-    data: newList,
-    error: createError,
-  } = await supabase
+  return (result.data ?? []) as ShoppingList[];
+}
+
+async function insertList(
+  userId: string,
+  name: string
+): Promise<ShoppingList> {
+  const supabase = createClient();
+
+  let result = await supabase
     .from("shopping_lists")
     .insert({
-      name: "My Grocery List",
-      user_id: user.id,
+      name,
+      user_id: userId,
+      last_opened_at: new Date().toISOString(),
     })
     .select()
     .single();
 
-  if (createError) {
-    throw createError;
+  // last_opened_at missing (SQL not run yet): create without it.
+  if (result.error) {
+    result = await supabase
+      .from("shopping_lists")
+      .insert({ name, user_id: userId })
+      .select()
+      .single();
   }
 
-  return newList;
+  if (result.error) {
+    throw result.error;
+  }
+
+  return result.data as ShoppingList;
+}
+
+/*
+ * The list that is currently open: the most recently
+ * opened one. Creates a first list if there is none.
+ */
+export async function getOrCreateShoppingList(): Promise<ShoppingList> {
+  const userId = await requireUserId();
+
+  const lists = await fetchUserLists(userId);
+
+  if (lists.length > 0) {
+    return lists[0];
+  }
+
+  return insertList(userId, "My Grocery List");
+}
+
+/* Every saved list with how many items it holds. */
+export async function getShoppingLists(): Promise<
+  (ShoppingList & { itemCount: number })[]
+> {
+  const supabase = createClient();
+
+  const userId = await requireUserId();
+
+  const lists = await fetchUserLists(userId);
+
+  if (lists.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("shopping_list_items")
+    .select("shopping_list_id")
+    .in(
+      "shopping_list_id",
+      lists.map((list) => list.id)
+    );
+
+  if (error) {
+    throw error;
+  }
+
+  const counts = new Map<string, number>();
+
+  for (const row of (data ?? []) as {
+    shopping_list_id: string;
+  }[]) {
+    counts.set(
+      row.shopping_list_id,
+      (counts.get(row.shopping_list_id) ?? 0) + 1
+    );
+  }
+
+  return lists.map((list) => ({
+    ...list,
+    itemCount: counts.get(list.id) ?? 0,
+  }));
+}
+
+export async function createShoppingList(
+  name: string
+): Promise<ShoppingList> {
+  return insertList(await requireUserId(), name);
+}
+
+/* Open this list (it becomes the one shown next time too). */
+export async function setActiveShoppingList(id: string) {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("shopping_lists")
+    .update({
+      last_opened_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function renameShoppingList(
+  id: string,
+  name: string
+) {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("shopping_lists")
+    .update({ name })
+    .eq("id", id);
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function deleteShoppingList(id: string) {
+  const supabase = createClient();
+
+  // Remove the list's items first, then the list itself.
+  const { error: itemsError } = await supabase
+    .from("shopping_list_items")
+    .delete()
+    .eq("shopping_list_id", id);
+
+  if (itemsError) {
+    throw itemsError;
+  }
+
+  const { error } = await supabase
+    .from("shopping_lists")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    throw error;
+  }
 }
 
 export async function getShoppingListItems(

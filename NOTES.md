@@ -74,6 +74,11 @@ Last updated: 2026-11-11
 - Plan choices (plan type, store limit, swaps) are saved to `shopping_lists.plan_settings` (needs `supabase/08_plan_settings.sql`, OWNER MUST RUN) so reloads and other devices keep them. Swaps are keyed by product+store (`swapKey`), so they survive price refreshes. List items themselves were already saved in the database
 - OPEN BUG: owner reports "Almond Milk" chosen for a "2% Milk" item in Cheapest mode. Not reproducible with the generated sample data (planner picks a 2% Milk product); waiting on owner's plan line + SQL results
 
+## Done 2026-11-16 (excluded stores + saved lists; UI untested)
+- Preferences page has a Stores section: "I shop here" / "Excluded" per store (table `user_excluded_stores`). Excluded stores' prices are hidden on search (with a "Hiding prices from N excluded stores" note) and left out of plans ("Not shopping at: ...")
+- Saved lists: the Grocery List page has a list switcher (switch, + New list, Rename, Delete with confirm). The open list is the most recently opened one (`shopping_lists.last_opened_at`), so it follows you across devices. Plan choices are saved per list. "Add to list" on search adds to the open list and names it
+- Needs `supabase/09_stores_and_lists.sql` (OWNER MUST RUN). Before it is run the app still works with one list (switching shows an error)
+
 ## Next (in order)
 1. Run `supabase/01_security.sql`, then `supabase/02_sample_data.sql` in the Supabase SQL Editor
 2. `npm install`, `npm run build`, `npm run dev`; fix any errors

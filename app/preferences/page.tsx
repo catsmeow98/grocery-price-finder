@@ -3,6 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+import { useExcludedStores } from "@/components/preferences/useExcludedStores";
+import {
+  getAllStores,
+  type StoreRow,
+} from "@/lib/excludedStores";
 import {
   getPreferenceRows,
   removePreferenceById,
@@ -66,6 +71,91 @@ function Section({
   );
 }
 
+function StoresSection() {
+  const [stores, setStores] = useState<StoreRow[]>([]);
+
+  const [loadError, setLoadError] = useState(false);
+
+  const { excluded, problem, setExcluded } =
+    useExcludedStores();
+
+  useEffect(() => {
+    async function load() {
+      try {
+        setStores(await getAllStores());
+      } catch (err) {
+        console.error(err);
+
+        setLoadError(true);
+      }
+    }
+
+    load();
+  }, []);
+
+  return (
+    <section className="rounded-2xl border border-border bg-surface p-6">
+      <h2 className="text-xl font-semibold text-foreground">
+        Stores
+      </h2>
+
+      <p className="mt-1 text-sm text-text-muted">
+        Exclude stores you won&apos;t shop at. Their prices
+        are hidden from search and left out of your
+        shopping plans.
+      </p>
+
+      {(problem || loadError) && (
+        <p className="mt-3 text-sm text-red-400">
+          {problem ?? "Unable to load the store list."}
+        </p>
+      )}
+
+      <ul className="mt-4 space-y-2">
+        {stores.map((store) => {
+          const isExcluded = excluded.has(store.id);
+
+          return (
+            <li
+              key={store.id}
+              className="flex items-center justify-between gap-3 rounded-xl bg-background/40 px-4 py-3"
+            >
+              <div>
+                <p className="font-medium text-foreground">
+                  {store.name}
+                </p>
+
+                <p className="text-sm text-text-muted">
+                  {[store.address, store.city]
+                    .filter(Boolean)
+                    .join(", ")}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                aria-pressed={isExcluded}
+                onClick={() =>
+                  setExcluded(store.id, !isExcluded)
+                }
+                className={`shrink-0 rounded-lg border px-3 py-1.5 text-sm transition ${
+                  isExcluded
+                    ? "border-red-500/40 bg-red-500/10 text-red-400"
+                    : "border-border text-text-secondary hover:bg-surface-hover hover:text-foreground"
+                }`}
+              >
+                {isExcluded
+                  ? "Excluded"
+                  : "I shop here"}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 export default function PreferencesPage() {
   const [rows, setRows] = useState<
     PreferenceRow[]
@@ -119,7 +209,7 @@ export default function PreferencesPage() {
     <main className="min-h-screen bg-background">
       <div className="mx-auto max-w-3xl px-6 py-12">
         <h1 className="text-4xl font-bold tracking-tight text-foreground">
-          Brand preferences
+          Preferences
         </h1>
 
         <p className="mt-2 text-text-muted">
@@ -160,6 +250,8 @@ export default function PreferencesPage() {
               description="Never recommended in any plan."
               list={blocked}
             />
+
+            <StoresSection />
           </div>
         )}
       </div>

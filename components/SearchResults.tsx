@@ -7,6 +7,7 @@ import ProductCard from "@/components/ProductCard";
 import FilterBar from "@/components/FilterBar";
 import BrandToggle from "@/components/BrandToggle";
 import { usePreferences } from "@/components/preferences/usePreferences";
+import { useExcludedStores } from "@/components/preferences/useExcludedStores";
 import { withNext } from "@/lib/redirect";
 import type { Preference } from "@/types/shopping";
 import {
@@ -24,6 +25,7 @@ type Product = {
   price: number;
   regular_price?: number;
   sale_price?: number | null;
+  store_id?: string | null;
   stores?: {
     name: string;
     city: string;
@@ -36,10 +38,24 @@ type SearchResultsProps = {
 };
 
 export default function SearchResults({
-  products,
+  products: allProducts,
   search,
 }: SearchResultsProps) {
   const router = useRouter();
+
+  // Prices from stores the customer excluded are hidden.
+  const { excluded: excludedStores } =
+    useExcludedStores();
+
+  const products = useMemo(
+    () =>
+      allProducts.filter(
+        (product) =>
+          !product.store_id ||
+          !excludedStores.has(product.store_id)
+      ),
+    [allProducts, excludedStores]
+  );
 
   const {
     map: preferences,
@@ -260,6 +276,19 @@ export default function SearchResults({
       {preferenceProblem && (
         <p className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
           {preferenceProblem}
+        </p>
+      )}
+
+      {excludedStores.size > 0 && (
+        <p className="mb-4 text-sm text-text-muted">
+          Hiding prices from {excludedStores.size} excluded{" "}
+          {excludedStores.size === 1 ? "store" : "stores"}.{" "}
+          <a
+            href="/preferences"
+            className="text-primary underline"
+          >
+            Manage stores
+          </a>
         </p>
       )}
 

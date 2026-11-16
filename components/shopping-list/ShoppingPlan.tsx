@@ -29,6 +29,8 @@ import {
   toPreferenceMap,
 } from "@/lib/preferences";
 
+import { getExcludedStoreIds } from "@/lib/excludedStores";
+
 import {
   parsePlanSettings,
   savePlanSettings,
@@ -58,6 +60,13 @@ export default function ShoppingPlan({
 
   const [preferences, setPreferences] =
     useState<PreferenceMap>({});
+
+  const [excludedIds, setExcludedIds] = useState<
+    string[]
+  >([]);
+
+  const [storesWarning, setStoresWarning] =
+    useState(false);
 
   const [listId, setListId] = useState<
     string | null
@@ -167,6 +176,23 @@ export default function ShoppingPlan({
           setPreferences({});
           setPrefsWarning(true);
         }
+
+        /*
+         * Stores the customer excluded (also optional).
+         */
+        try {
+          setStoresWarning(false);
+
+          setExcludedIds(await getExcludedStoreIds());
+        } catch (storeError) {
+          console.error(
+            "Unable to load excluded stores:",
+            storeError
+          );
+
+          setExcludedIds([]);
+          setStoresWarning(true);
+        }
       } catch (err) {
         console.error(err);
 
@@ -233,6 +259,38 @@ export default function ShoppingPlan({
   ]);
 
   /*
+   * Only prices from stores the customer shops at.
+   */
+  const visibleProducts = useMemo(() => {
+    const excluded = new Set(excludedIds);
+
+    return products.filter(
+      (product) =>
+        !product.store_id ||
+        !excluded.has(product.store_id)
+    );
+  }, [products, excludedIds]);
+
+  const excludedStoreNames = useMemo(() => {
+    const excluded = new Set(excludedIds);
+
+    return Array.from(
+      new Set(
+        products
+          .filter(
+            (product) =>
+              product.store_id &&
+              excluded.has(product.store_id)
+          )
+          .map(
+            (product) => product.stores?.name ?? ""
+          )
+          .filter(Boolean)
+      )
+    );
+  }, [products, excludedIds]);
+
+  /*
    * The automatic plans: any number of stores, at most 2
    * stores, and 1 store. They ignore swaps, so they stay
    * comparable.
@@ -240,12 +298,12 @@ export default function ShoppingPlan({
   const variants = useMemo(
     () =>
       mode && items.length > 0
-        ? computePlanVariants(items, products, {
+        ? computePlanVariants(items, visibleProducts, {
             mode,
             preferences,
           })
         : null,
-    [items, products, preferences, mode]
+    [items, visibleProducts, preferences, mode]
   );
 
   /*
@@ -261,9 +319,9 @@ export default function ShoppingPlan({
   const plan = useMemo(
     () =>
       baseline
-        ? applySwaps(items, products, baseline, swaps)
+        ? applySwaps(items, visibleProducts, baseline, swaps)
         : null,
-    [baseline, items, products, swaps]
+    [baseline, items, visibleProducts, swaps]
   );
 
   const isCustom = Boolean(
@@ -320,7 +378,7 @@ export default function ShoppingPlan({
   }
 
   const getAlternatives = (item: ShoppingListItem) =>
-    getSwapAlternatives(item, products);
+    getSwapAlternatives(item, visibleProducts);
 
   const preferredCount = Object.values(
     preferences
@@ -372,6 +430,13 @@ export default function ShoppingPlan({
           Your brand preferences could not be loaded, so
           blocked and preferred brands are NOT applied to
           this plan.
+        </p>
+      )}
+
+      {storesWarning && (
+        <p className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          Your excluded stores could not be loaded, so they
+          are NOT applied to this plan.
         </p>
       )}
 
@@ -496,6 +561,18 @@ export default function ShoppingPlan({
           Manage preferences
         </Link>
       </div>
+
+      {excludedStoreNames.length > 0 && (
+        <p className="text-sm text-text-muted">
+          Not shopping at: {excludedStoreNames.join(", ")}.{" "}
+          <Link
+            href="/preferences"
+            className="text-primary underline"
+          >
+            Change
+          </Link>
+        </p>
+      )}
 
       {/* Store limit */}
       {variants && (

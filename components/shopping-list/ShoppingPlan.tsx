@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 
 import ShoppingPlanStore from "./ShoppingPlanStore";
@@ -13,19 +18,27 @@ import {
 } from "@/lib/database";
 
 import {
+  applySwaps,
   computePlanVariants,
   getSwapAlternatives,
+  swapKey,
 } from "@/lib/shoppingUtils";
+
 import {
   getPreferenceRows,
   toPreferenceMap,
 } from "@/lib/preferences";
 
+import {
+  parsePlanSettings,
+  savePlanSettings,
+} from "@/lib/planSettings";
+
 import type {
-  ShoppingPlan as ShoppingPlanData,
   PlanMode,
   PreferenceMap,
   Product,
+  ShoppingResult,
 } from "@/types/shopping";
 
 type ShoppingPlanProps = {
@@ -46,38 +59,48 @@ export default function ShoppingPlan({
   const [preferences, setPreferences] =
     useState<PreferenceMap>({});
 
-  /*
-   * null = the customer has not chosen yet,
-   * so we ask them first.
-   */
-  const [prefsWarning, setPrefsWarning] =
-    useState(false);
+  const [listId, setListId] = useState<
+    string | null
+  >(null);
 
   /*
-   * Products the customer swapped by hand:
-   * grocery-list item id -> chosen product id.
-   * (Kept for this visit only.)
+   * Plan choices. These are saved with the list, so a page
+   * reload (or another device) shows the same plan.
+   *
+   * mode: null = the customer has not chosen yet, so we ask.
+   * maxStores: the automatic plan used as the starting point
+   *            (null = any number of stores).
+   * swaps: grocery-list item id -> swapKey of the product
+   *        the customer picked by hand.
    */
-  const [overrides, setOverrides] = useState<
-    Record<string, string>
-  >({});
+  const [mode, setMode] =
+    useState<PlanMode | null>(null);
 
-  /*
-   * How many stores the customer is willing to visit.
-   * null = any number of stores.
-   */
   const [maxStores, setMaxStores] = useState<
     1 | 2 | null
   >(null);
 
-  const [mode, setMode] =
-    useState<PlanMode | null>(null);
+  const [swaps, setSwaps] = useState<
+    Record<string, string>
+  >({});
+
+  const [settingsReady, setSettingsReady] =
+    useState(false);
+
+  const [saveProblem, setSaveProblem] =
+    useState(false);
+
+  const hydratedRef = useRef(false);
+  const lastSavedRef = useRef("");
 
   const [loading, setLoading] =
     useState(true);
 
   const [error, setError] =
     useState<string | null>(null);
+
+  const [prefsWarning, setPrefsWarning] =
+    useState(false);
 
   useEffect(() => {
     async function loadPlanData() {
@@ -92,6 +115,27 @@ export default function ShoppingPlan({
           await getShoppingListItems(list.id);
 
         setItems(listItems);
+        setListId(list.id);
+
+        /*
+         * Restore the saved plan choices the first time only.
+         * (Adding an item later must not reset them.)
+         */
+        if (!hydratedRef.current) {
+          const saved = parsePlanSettings(
+            (list as { plan_settings?: unknown })
+              .plan_settings
+          );
+
+          hydratedRef.current = true;
+          lastSavedRef.current =
+            JSON.stringify(saved);
+
+          setMode(saved.mode);
+          setMaxStores(saved.maxStores);
+          setSwaps(saved.swaps);
+          setSettingsReady(true);
+        }
 
         if (listItems.length === 0) {
           return;
@@ -138,8 +182,60 @@ export default function ShoppingPlan({
   }, [refreshKey]);
 
   /*
-   * The same list planned for any number of stores,
-   * for at most 2 stores, and for 1 store.
+   * Save the plan choices shortly after they change.
+   * Swaps for items that were removed from the list are dropped.
+   */
+  useEffect(() => {
+    if (!settingsReady || !listId) return;
+
+    const liveIds = new Set(
+      items.map((item) => item.id)
+    );
+
+    const payload = {
+      mode,
+      maxStores,
+      swaps: Object.fromEntries(
+        Object.entries(swaps).filter(([id]) =>
+          liveIds.has(id)
+        )
+      ),
+    };
+
+    const json = JSON.stringify(payload);
+
+    if (json === lastSavedRef.current) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        await savePlanSettings(listId, payload);
+
+        lastSavedRef.current = json;
+        setSaveProblem(false);
+      } catch (err) {
+        console.error(
+          "Unable to save plan choices:",
+          err
+        );
+
+        setSaveProblem(true);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [
+    settingsReady,
+    listId,
+    items,
+    mode,
+    maxStores,
+    swaps,
+  ]);
+
+  /*
+   * The automatic plans: any number of stores, at most 2
+   * stores, and 1 store. They ignore swaps, so they stay
+   * comparable.
    */
   const variants = useMemo(
     () =>
@@ -147,40 +243,74 @@ export default function ShoppingPlan({
         ? computePlanVariants(items, products, {
             mode,
             preferences,
-            overrides,
           })
         : null,
-    [items, products, preferences, mode, overrides]
+    [items, products, preferences, mode]
   );
 
-  const requestedPlan: ShoppingPlanData | null =
-    variants
-      ? maxStores === null
-        ? variants.any
-        : variants.byLimit[maxStores]
-      : null;
+  /*
+   * The automatic plan the customer started from.
+   * Swaps are applied on top of it.
+   */
+  const baseline = variants
+    ? maxStores === null
+      ? variants.any
+      : variants.byLimit[maxStores]
+    : null;
 
-  // The chosen limit may be impossible (swapped items
-  // already sit in more stores than allowed).
-  const limitUnavailable =
-    maxStores !== null &&
-    variants !== null &&
-    requestedPlan === null;
+  const plan = useMemo(
+    () =>
+      baseline
+        ? applySwaps(items, products, baseline, swaps)
+        : null,
+    [baseline, items, products, swaps]
+  );
 
-  const plan = requestedPlan ?? variants?.any ?? null;
+  const isCustom = Boolean(
+    plan?.results.some(
+      (result) => result.basis === "swapped"
+    )
+  );
 
-  function handleSwap(
-    itemId: string,
-    productId: string
-  ) {
-    setOverrides((current) => ({
-      ...current,
-      [itemId]: productId,
-    }));
+  /* What each item would be without swaps (for "vs default"). */
+  const defaults = useMemo(() => {
+    const map: Record<string, ShoppingResult> = {};
+
+    for (const result of baseline?.results ?? []) {
+      map[result.item.id] = result;
+    }
+
+    return map;
+  }, [baseline]);
+
+  function chooseStoreLimit(limit: 1 | 2 | null) {
+    // Choosing an automatic plan replaces any swaps.
+    setSwaps({});
+    setMaxStores(limit);
+  }
+
+  function handleSwap(itemId: string, key: string) {
+    const automatic = defaults[itemId];
+
+    setSwaps((current) => {
+      const next = { ...current };
+
+      // Swapping back to the default product = no swap.
+      if (
+        automatic &&
+        swapKey(automatic.product) === key
+      ) {
+        delete next[itemId];
+      } else {
+        next[itemId] = key;
+      }
+
+      return next;
+    });
   }
 
   function handleResetSwap(itemId: string) {
-    setOverrides((current) => {
+    setSwaps((current) => {
       const next = { ...current };
 
       delete next[itemId];
@@ -200,25 +330,11 @@ export default function ShoppingPlan({
     preferences
   ).filter((value) => value === "blocked").length;
 
-  /*
-   * Pull the calculated values
-   * out of the shopping plan.
-   */
-  const results =
-    plan?.results ?? [];
+  const results = plan?.results ?? [];
+  const skipped = plan?.skipped ?? [];
+  const storeGroups = plan?.storeGroups ?? [];
+  const total = plan?.total ?? 0;
 
-  const skipped =
-    plan?.skipped ?? [];
-
-  const storeGroups =
-    plan?.storeGroups ?? [];
-
-  const total =
-    plan?.total ?? 0;
-
-  /*
-   * Loading state.
-   */
   if (loading) {
     return (
       <div className="rounded-2xl border border-border bg-surface p-8 text-center">
@@ -229,9 +345,6 @@ export default function ShoppingPlan({
     );
   }
 
-  /*
-   * Error state.
-   */
   if (error) {
     return (
       <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6">
@@ -242,9 +355,6 @@ export default function ShoppingPlan({
     );
   }
 
-  /*
-   * Empty list.
-   */
   if (items.length === 0) {
     return (
       <div className="rounded-2xl border border-border bg-surface p-8 text-center">
@@ -255,13 +365,24 @@ export default function ShoppingPlan({
     );
   }
 
-  const warning = prefsWarning ? (
-    <p className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-      Your brand preferences could not be loaded, so
-      blocked and preferred brands are NOT applied to
-      this plan.
-    </p>
-  ) : null;
+  const warning = (
+    <>
+      {prefsWarning && (
+        <p className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          Your brand preferences could not be loaded, so
+          blocked and preferred brands are NOT applied to
+          this plan.
+        </p>
+      )}
+
+      {saveProblem && (
+        <p className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          Your plan choices could not be saved, so a
+          reload will lose them.
+        </p>
+      )}
+    </>
+  );
 
   /*
    * Ask how to build the plan before showing it.
@@ -352,7 +473,11 @@ export default function ShoppingPlan({
               key={value}
               type="button"
               aria-pressed={mode === value}
-              onClick={() => setMode(value)}
+              onClick={() => {
+                // A different plan type starts fresh.
+                setSwaps({});
+                setMode(value);
+              }}
               className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
                 mode === value
                   ? "bg-primary text-background"
@@ -379,7 +504,7 @@ export default function ShoppingPlan({
             How many stores do you want to visit?
           </p>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {(
               [
                 [null, "Any number of stores", variants.any],
@@ -388,27 +513,23 @@ export default function ShoppingPlan({
               ] as const
             ).map(([limit, label, option]) => {
               const selected =
-                !limitUnavailable && maxStores === limit;
+                !isCustom && maxStores === limit;
 
-              const missing = option
-                ? option.skipped.filter(
-                    (entry) =>
-                      entry.reason === "not_at_stores"
-                  ).length
-                : 0;
+              const missing = option.skipped.filter(
+                (entry) =>
+                  entry.reason === "not_at_stores"
+              ).length;
 
-              const difference = option
-                ? option.total - variants.any.total
-                : 0;
+              const difference =
+                option.total - variants.any.total;
 
               return (
                 <button
                   key={String(limit)}
                   type="button"
-                  disabled={!option}
                   aria-pressed={selected}
-                  onClick={() => setMaxStores(limit)}
-                  className={`rounded-2xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                  onClick={() => chooseStoreLimit(limit)}
+                  className={`rounded-2xl border p-4 text-left transition ${
                     selected
                       ? "border-primary bg-primary/10"
                       : "border-border bg-surface hover:bg-surface-hover"
@@ -418,51 +539,63 @@ export default function ShoppingPlan({
                     {label}
                   </p>
 
-                  {option ? (
-                    <>
-                      <p className="mt-1 text-xl font-bold text-foreground">
-                        ${option.total.toFixed(2)}
-                      </p>
+                  <p className="mt-1 text-xl font-bold text-foreground">
+                    ${option.total.toFixed(2)}
+                  </p>
 
-                      <p className="text-xs text-text-muted">
-                        {option.storeGroups
-                          .map((group) => group.storeName)
-                          .join(" + ") || "No stores"}
-                      </p>
+                  <p className="text-xs text-text-muted">
+                    {option.storeGroups
+                      .map((group) => group.storeName)
+                      .join(" + ") || "No stores"}
+                  </p>
 
-                      {missing > 0 ? (
-                        <p className="mt-1 text-xs text-red-400">
-                          {missing}{" "}
-                          {missing === 1 ? "item is" : "items are"}{" "}
-                          not sold there
-                        </p>
-                      ) : limit !== null &&
-                        Math.abs(difference) >= 0.005 ? (
-                        <p className="mt-1 text-xs text-text-muted">
-                          {difference > 0 ? "+" : "-"}$
-                          {Math.abs(difference).toFixed(2)}{" "}
-                          vs any number of stores
-                        </p>
-                      ) : null}
-                    </>
-                  ) : (
-                    <p className="mt-1 text-xs text-text-muted">
-                      Your swapped items are in more stores
-                      than this.
+                  {missing > 0 ? (
+                    <p className="mt-1 text-xs text-red-400">
+                      {missing}{" "}
+                      {missing === 1 ? "item is" : "items are"}{" "}
+                      not sold there
                     </p>
-                  )}
+                  ) : limit !== null &&
+                    Math.abs(difference) >= 0.005 ? (
+                    <p className="mt-1 text-xs text-text-muted">
+                      {difference > 0 ? "+" : "-"}$
+                      {Math.abs(difference).toFixed(2)} vs
+                      any number of stores
+                    </p>
+                  ) : null}
                 </button>
               );
             })}
-          </div>
 
-          {limitUnavailable && (
-            <p className="mt-2 text-xs text-text-muted">
-              That store limit isn&apos;t possible with
-              your swapped items, so we&apos;re showing
-              any number of stores.
-            </p>
-          )}
+            {isCustom && (
+              <div
+                aria-current="true"
+                className="rounded-2xl border border-primary bg-primary/10 p-4"
+              >
+                <p className="text-sm font-medium text-foreground">
+                  Custom
+                </p>
+
+                <p className="mt-1 text-xl font-bold text-foreground">
+                  ${total.toFixed(2)}
+                </p>
+
+                <p className="text-xs text-text-muted">
+                  {storeGroups
+                    .map((group) => group.storeName)
+                    .join(" + ") || "No stores"}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => setSwaps({})}
+                  className="mt-2 text-xs text-text-secondary underline hover:text-foreground"
+                >
+                  Reset all swaps
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -524,6 +657,7 @@ export default function ShoppingPlan({
               key={`${store.storeName}-${store.city}`}
               store={store}
               preferences={preferences}
+              defaults={defaults}
               getAlternatives={getAlternatives}
               onSwap={handleSwap}
               onResetSwap={handleResetSwap}

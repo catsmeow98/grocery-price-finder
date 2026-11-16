@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { getPreference } from "@/lib/preferenceUtils";
+import { swapKey } from "@/lib/shoppingUtils";
 
 import type {
   PreferenceMap,
@@ -14,11 +15,13 @@ import type { ShoppingListItem } from "@/lib/database";
 
 type ShoppingPlanItemProps = {
   result: ShoppingResult;
+  /* what this item would be without any swap */
+  defaultResult?: ShoppingResult;
   preferences: PreferenceMap;
   getAlternatives: (
     item: ShoppingListItem
   ) => ShoppingOption[];
-  onSwap: (itemId: string, productId: string) => void;
+  onSwap: (itemId: string, swapKey: string) => void;
   onResetSwap: (itemId: string) => void;
 };
 
@@ -30,8 +33,16 @@ function formatDifference(amount: number): string {
   ).toFixed(2)}`;
 }
 
+/* e.g. "+$1.50 vs default" */
+function formatVsDefault(amount: number): string {
+  return Math.abs(amount) < 0.005
+    ? "same price as default"
+    : `${formatDifference(amount)} vs default`;
+}
+
 export default function ShoppingPlanItem({
   result,
+  defaultResult,
   preferences,
   getAlternatives,
   onSwap,
@@ -79,6 +90,12 @@ export default function ShoppingPlanItem({
           {result.basis === "swapped" && (
             <p className="mt-1 text-xs font-medium text-primary">
               ↔ You chose this product
+              {defaultResult
+                ? ` · ${formatVsDefault(
+                    result.totalPrice -
+                      defaultResult.totalPrice
+                  )}`
+                : ""}
             </p>
           )}
         </div>
@@ -94,15 +111,28 @@ export default function ShoppingPlanItem({
             </span>
           ) : null}
 
-          <div>
+          <div className="mt-1 flex justify-end gap-3">
             <button
               type="button"
               aria-expanded={open}
               onClick={() => setOpen((value) => !value)}
-              className="mt-1 text-xs text-text-secondary underline hover:text-foreground"
+              className="text-xs text-text-secondary underline hover:text-foreground"
             >
               {open ? "Close" : "Swap"}
             </button>
+
+            {result.basis === "swapped" && (
+              <button
+                type="button"
+                onClick={() => {
+                  onResetSwap(result.item.id);
+                  setOpen(false);
+                }}
+                className="text-xs font-medium text-primary underline hover:text-foreground"
+              >
+                ↺ Reset
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -111,13 +141,19 @@ export default function ShoppingPlanItem({
         <div className="mt-3 border-t border-border pt-3">
           <p className="mb-2 text-xs text-text-muted">
             Choose a different product for this item
-            (cheapest first):
+            (cheapest first, price compared with the
+            default pick):
           </p>
 
           <ul className="space-y-1">
             {alternatives.map((option) => {
               const isCurrent =
                 option.product.id === result.product.id;
+
+              const isDefault = defaultResult
+                ? swapKey(option.product) ===
+                  swapKey(defaultResult.product)
+                : false;
 
               const preference = getPreference(
                 preferences,
@@ -133,7 +169,7 @@ export default function ShoppingPlanItem({
                     onClick={() => {
                       onSwap(
                         result.item.id,
-                        option.product.id
+                        swapKey(option.product)
                       );
                       setOpen(false);
                     }}
@@ -145,6 +181,7 @@ export default function ShoppingPlanItem({
                   >
                     <span>
                       <span className="font-medium text-foreground">
+                        {isCurrent ? "✓ " : ""}
                         {option.product.brand ?? "No brand"}
                       </span>
 
@@ -177,12 +214,18 @@ export default function ShoppingPlanItem({
                       </span>
 
                       <span className="block text-xs text-text-muted">
-                        {isCurrent
-                          ? "current"
-                          : formatDifference(
-                              option.totalPrice -
-                                result.totalPrice
-                            )}
+                        {isDefault
+                          ? isCurrent
+                            ? "default · current"
+                            : "default"
+                          : defaultResult
+                            ? formatVsDefault(
+                                option.totalPrice -
+                                  defaultResult.totalPrice
+                              )
+                            : isCurrent
+                              ? "current"
+                              : ""}
                       </span>
                     </span>
                   </button>
@@ -190,19 +233,6 @@ export default function ShoppingPlanItem({
               );
             })}
           </ul>
-
-          {result.basis === "swapped" && (
-            <button
-              type="button"
-              onClick={() => {
-                onResetSwap(result.item.id);
-                setOpen(false);
-              }}
-              className="mt-3 text-xs text-text-secondary underline hover:text-foreground"
-            >
-              Reset to automatic choice
-            </button>
-          )}
         </div>
       )}
     </div>

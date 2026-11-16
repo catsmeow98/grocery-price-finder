@@ -6,6 +6,8 @@ export type ProductOption = {
 
 export type Product = {
   id: string;
+  /* products.id (stays the same when prices are refreshed) */
+  product_id?: string;
   name: string;
   price: number;
   regular_price?: number;

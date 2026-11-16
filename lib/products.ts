@@ -117,6 +117,7 @@ export async function getProductsWithPrices(
 
     products.push({
       id: row.id,
+      product_id: row.product_id,
       name: row.products.name,
       brand: row.products.brand,
       quantity: Number(row.products.quantity),

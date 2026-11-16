@@ -3,6 +3,7 @@
 import type {
   PreferenceMap,
   ShoppingOption,
+  ShoppingResult,
   StoreGroup,
 } from "@/types/shopping";
 
@@ -13,16 +14,19 @@ import ShoppingPlanItem from "./ShoppingPlanItem";
 type ShoppingPlanStoreProps = {
   store: StoreGroup;
   preferences: PreferenceMap;
+  /* what each item would be without swaps */
+  defaults: Record<string, ShoppingResult>;
   getAlternatives: (
     item: ShoppingListItem
   ) => ShoppingOption[];
-  onSwap: (itemId: string, productId: string) => void;
+  onSwap: (itemId: string, swapKey: string) => void;
   onResetSwap: (itemId: string) => void;
 };
 
 export default function ShoppingPlanStore({
   store,
   preferences,
+  defaults,
   getAlternatives,
   onSwap,
   onResetSwap,
@@ -68,6 +72,7 @@ export default function ShoppingPlanStore({
             key={result.item.id}
             result={result}
             preferences={preferences}
+            defaultResult={defaults[result.item.id]}
             getAlternatives={getAlternatives}
             onSwap={onSwap}
             onResetSwap={onResetSwap}

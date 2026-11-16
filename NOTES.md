@@ -67,6 +67,13 @@ Last updated: 2026-11-11
 - Store limit: three cards compare the plan for any number of stores, up to 2 stores, and 1 store (total, store names, items not sold there). Best subset = fewest unavailable items, then lowest total, then fewest stores. Swapped items force their stores; a limit smaller than that is disabled
 - Engine in `lib/shoppingUtils.ts` (`computePlanVariants`, `getSwapAlternatives`); preferred mode falls back per store set when the preferred brand isn't in the chosen stores
 
+## Done 2026-11-16 (swap improvements + saved plan choices; engine tested by script, UI untested)
+- Swaps now sit on top of the automatic plan you started from: only the swapped item changes. Each swap shows "+$x vs default"; the swap list compares every product against the default pick
+- After any swap the store-limit cards show a selected "Custom" card (total, stores, "Reset all swaps"); clicking an automatic card or changing plan type clears swaps
+- Each swapped item has a visible "Reset" button
+- Plan choices (plan type, store limit, swaps) are saved to `shopping_lists.plan_settings` (needs `supabase/08_plan_settings.sql`, OWNER MUST RUN) so reloads and other devices keep them. Swaps are keyed by product+store (`swapKey`), so they survive price refreshes. List items themselves were already saved in the database
+- OPEN BUG: owner reports "Almond Milk" chosen for a "2% Milk" item in Cheapest mode. Not reproducible with the generated sample data (planner picks a 2% Milk product); waiting on owner's plan line + SQL results
+
 ## Next (in order)
 1. Run `supabase/01_security.sql`, then `supabase/02_sample_data.sql` in the Supabase SQL Editor
 2. `npm install`, `npm run build`, `npm run dev`; fix any errors

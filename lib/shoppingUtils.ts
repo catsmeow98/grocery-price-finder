@@ -143,8 +143,6 @@ export function findCheapestOption(
 export type PlanOptions = {
   mode: PlanMode;
   preferences: PreferenceMap;
-  /* grocery-list item id -> id of the product the customer chose */
-  overrides?: Record<string, string>;
   /* null / undefined = shop at as many stores as needed */
   maxStores?: number | null;
 };
@@ -164,7 +162,6 @@ type Tier = {
 type ItemChoice = {
   item: ShoppingListItem;
   skip?: "blocked" | "no_match";
-  pinned?: ShoppingOption;
   tiers: Tier[];
 };
 
@@ -176,13 +173,23 @@ function storeKey(product: Product): string {
 }
 
 /**
+ * Identifies one product at one store. Unlike the price-row
+ * id, it stays the same when prices are refreshed, so saved
+ * swaps keep working.
+ */
+export function swapKey(product: Product): string {
+  return `${product.product_id ?? product.id}|${
+    product.store_id ?? ""
+  }`;
+}
+
+/**
  * Work out, for every grocery-list item, which products
  * could be used (before deciding on stores).
  *
  * - "cheapest" mode ignores brand preferences.
  * - "preferred" mode removes blocked brands and tries
  *   preferred brands first.
- * - Items the customer swapped are pinned to their choice.
  */
 function buildItemChoices(
   items: ShoppingListItem[],
@@ -206,27 +213,6 @@ function buildItemChoices(
 
     if (matches.length === 0) {
       return { item, skip: "no_match", tiers: [] };
-    }
-
-    // The customer picked a specific product.
-    const overrideId = options.overrides?.[item.id];
-
-    if (overrideId) {
-      const chosen = matches.find(
-        (product) => product.id === overrideId
-      );
-
-      if (chosen) {
-        const [pinned] = calculateShoppingOptions(
-          [chosen],
-          quantity,
-          item.unit
-        );
-
-        if (pinned) {
-          return { item, pinned, tiers: [] };
-        }
-      }
     }
 
     const allowed =
@@ -321,13 +307,6 @@ function evaluateStores(
       continue;
     }
 
-    if (choice.pinned) {
-      results.push(
-        toResult(choice.item, choice.pinned, "swapped")
-      );
-      continue;
-    }
-
     let chosen: ShoppingResult | null = null;
 
     for (const tier of choice.tiers) {
@@ -397,56 +376,37 @@ function* combinations<T>(
  *
  * "Best" = fewest items that cannot be bought, then the
  * lowest total, then the fewest stores actually visited.
- * Returns null if the customer's swapped items already
- * sit in more than `maxStores` stores.
  */
 function planWithStoreLimit(
   choices: ItemChoice[],
   maxStores: number | null
-): ShoppingPlan | null {
+): ShoppingPlan {
   if (maxStores === null) {
     return assemblePlan(evaluateStores(choices, null));
   }
 
-  const pinnedStores = new Set(
-    choices
-      .filter((choice) => choice.pinned)
-      .map((choice) => storeKey(choice.pinned!.product))
-  );
-
-  if (pinnedStores.size > maxStores) {
-    return null;
-  }
-
-  const others = new Set<string>();
+  const stores = new Set<string>();
 
   for (const choice of choices) {
     for (const tier of choice.tiers) {
       for (const option of tier.options) {
-        const key = storeKey(option.product);
-
-        if (!pinnedStores.has(key)) {
-          others.add(key);
-        }
+        stores.add(storeKey(option.product));
       }
     }
   }
 
-  const pickCount = Math.min(
-    maxStores - pinnedStores.size,
-    others.size
-  );
+  const pickCount = Math.min(maxStores, stores.size);
 
   let best: ShoppingPlan | null = null;
   let bestScore: [number, number, number] | null = null;
 
   for (const combo of combinations(
-    Array.from(others),
+    Array.from(stores),
     pickCount
   )) {
     const evaluated = evaluateStores(
       choices,
-      new Set([...pinnedStores, ...combo])
+      new Set(combo)
     );
 
     const plan = assemblePlan(evaluated);
@@ -475,7 +435,7 @@ function planWithStoreLimit(
     }
   }
 
-  return best;
+  return best as ShoppingPlan;
 }
 
 /**
@@ -541,27 +501,23 @@ const DEFAULT_OPTIONS: PlanOptions = {
 };
 
 /**
- * The shopping plan for the given options.
- * (maxStores is honoured when possible; otherwise all stores.)
+ * The automatic shopping plan for the given options.
  */
 export function computeShoppingPlan(
   items: ShoppingListItem[],
   products: Product[],
   options: PlanOptions = DEFAULT_OPTIONS
 ): ShoppingPlan {
-  const choices = buildItemChoices(items, products, options);
-
-  return (
-    planWithStoreLimit(choices, options.maxStores ?? null) ??
-    planWithStoreLimit(choices, null)!
+  return planWithStoreLimit(
+    buildItemChoices(items, products, options),
+    options.maxStores ?? null
   );
 }
 
 /**
  * The same shopping list planned three ways, so the
  * customer can compare: any number of stores, at most 2
- * stores, and 1 store. A limit is null when the customer's
- * swapped items already need more stores than that.
+ * stores, and 1 store.
  */
 export function computePlanVariants(
   items: ShoppingListItem[],
@@ -570,20 +526,84 @@ export function computePlanVariants(
   limits: number[] = [2, 1]
 ): {
   any: ShoppingPlan;
-  byLimit: Record<number, ShoppingPlan | null>;
+  byLimit: Record<number, ShoppingPlan>;
 } {
   const choices = buildItemChoices(items, products, options);
 
-  const byLimit: Record<number, ShoppingPlan | null> = {};
+  const byLimit: Record<number, ShoppingPlan> = {};
 
   for (const limit of limits) {
     byLimit[limit] = planWithStoreLimit(choices, limit);
   }
 
   return {
-    any: planWithStoreLimit(choices, null)!,
+    any: planWithStoreLimit(choices, null),
     byLimit,
   };
+}
+
+/**
+ * Put the customer's swaps on top of an automatic plan.
+ * Only the swapped items change; every other item keeps the
+ * choice it had in the plan.
+ *
+ * swaps: grocery-list item id -> swapKey(product)
+ */
+export function applySwaps(
+  items: ShoppingListItem[],
+  products: Product[],
+  plan: ShoppingPlan,
+  swaps: Record<string, string>
+): ShoppingPlan {
+  const planned = new Map(
+    plan.results.map((result) => [result.item.id, result])
+  );
+
+  const skippedBy = new Map(
+    plan.skipped.map((entry) => [entry.item.id, entry])
+  );
+
+  const results: ShoppingResult[] = [];
+  const skipped: SkippedItem[] = [];
+
+  for (const item of items) {
+    const wanted = swaps[item.id];
+
+    if (wanted) {
+      const chosen = findProductMatches(
+        products,
+        item.product_name
+      ).find((product) => swapKey(product) === wanted);
+
+      if (chosen) {
+        const [option] = calculateShoppingOptions(
+          [chosen],
+          Number(item.quantity),
+          item.unit
+        );
+
+        if (option) {
+          results.push(toResult(item, option, "swapped"));
+          continue;
+        }
+      }
+    }
+
+    const result = planned.get(item.id);
+
+    if (result) {
+      results.push(result);
+      continue;
+    }
+
+    const entry = skippedBy.get(item.id);
+
+    if (entry) {
+      skipped.push(entry);
+    }
+  }
+
+  return assemblePlan({ results, skipped });
 }
 
 /**

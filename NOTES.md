@@ -85,6 +85,7 @@ Last updated: 2026-11-17
 - Search and the shopping plan both use the same rule (`lib/storeAccess.ts`, `lib/storeAccessUtils.ts`)
 - Sample data regenerated: 6 stores with coordinates (2 extra locations to test "closest only"). `scripts/geocode-stores.mjs` writes `supabase/11_store_coordinates.sql` for real stores (Census geocoder, untested live)
 - "+ Add to list" on search: with 2+ lists it opens a dropdown to pick the list (name + item count); with one list it adds directly. Shows "Add to another list" afterwards
+- `supabase/12_merge_duplicate_stores.sql`: merges duplicate store rows (same name+address+city, ignoring case/spaces, e.g. Aldi/ALDI), moves their prices, then adds a unique index so they can't come back. Tested on a scratch Postgres. NOTE: the CSV importer is not in this repo; it must look stores up case-insensitively or it will now error on duplicates instead of creating them
 - SQL run order: 08, 09, 10, then re-run 02_sample_data.sql, then (real stores) the geocode script + 11
 
 ## Next (in order)

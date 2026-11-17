@@ -24,39 +24,42 @@ where s.name not like 'Sample %'
 order by lower(trim(s.name)), keep;
 
 -- STEP 2 (makes the change): select everything from here to STEP 3 and run it.
-drop table if exists store_map;
-create temp table store_map as
-select id as dup_id,
-       first_value(id) over (
-         partition by lower(trim(name)), lower(trim(coalesce(address,''))), lower(trim(coalesce(city,'')))
-         order by (select count(*) from public.prices p where p.store_id = stores.id) desc,
-                  (latitude is not null) desc, id
-       ) as keep_id
-from public.stores
-where name not like 'Sample %';
+-- It is one block, so it works even if the editor runs statements separately.
+do $$
+begin
+  create temp table store_map (dup_id uuid, keep_id uuid) on commit drop;
 
-delete from store_map where dup_id = keep_id;
+  insert into store_map
+  select id,
+         first_value(id) over (
+           partition by lower(trim(name)), lower(trim(coalesce(address,''))), lower(trim(coalesce(city,'')))
+           order by (select count(*) from public.prices p where p.store_id = stores.id) desc,
+                    (latitude is not null) desc, id
+         )
+  from public.stores
+  where name not like 'Sample %';
 
-update public.prices pr
-set store_id = m.keep_id
-from store_map m
-where pr.store_id = m.dup_id;
+  delete from store_map where dup_id = keep_id;
 
--- Keep a customer's include/exclude choice unless they already have one for the kept store.
-update public.user_store_overrides o
-set store_id = m.keep_id
-from store_map m
-where o.store_id = m.dup_id
-  and not exists (
-    select 1 from public.user_store_overrides x
-    where x.user_id = o.user_id and x.store_id = m.keep_id);
+  update public.prices pr
+  set store_id = m.keep_id
+  from store_map m
+  where pr.store_id = m.dup_id;
 
--- Deleting a store also removes any leftover choices that pointed at it.
-delete from public.stores s
-using store_map m
-where s.id = m.dup_id;
+  -- Keep a customer's include/exclude choice unless they already have one for the kept store.
+  update public.user_store_overrides o
+  set store_id = m.keep_id
+  from store_map m
+  where o.store_id = m.dup_id
+    and not exists (
+      select 1 from public.user_store_overrides x
+      where x.user_id = o.user_id and x.store_id = m.keep_id);
 
-drop table if exists store_map;
+  -- Deleting a store also removes any leftover choices that pointed at it.
+  delete from public.stores s
+  using store_map m
+  where s.id = m.dup_id;
+end $$;
 
 -- STEP 3 (run after STEP 2 succeeds): stop duplicates being created again.
 create unique index if not exists stores_unique_location

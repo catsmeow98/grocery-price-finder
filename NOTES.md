@@ -1,6 +1,6 @@
 # NOTES: Grocery Price Finder
 
-Last updated: 2026-11-11
+Last updated: 2026-11-17
 
 > Read this file first at the start of every session. Update it at the end of every session.
 > Goal right now: a **working prototype using sample data** (not Metro Detroit specific).
@@ -78,6 +78,14 @@ Last updated: 2026-11-11
 - Preferences page has a Stores section: "I shop here" / "Excluded" per store (table `user_excluded_stores`). Excluded stores' prices are hidden on search (with a "Hiding prices from N excluded stores" note) and left out of plans ("Not shopping at: ...")
 - Saved lists: the Grocery List page has a list switcher (switch, + New list, Rename, Delete with confirm). The open list is the most recently opened one (`shopping_lists.last_opened_at`), so it follows you across devices. Plan choices are saved per list. "Add to list" on search adds to the open list and names it
 - Needs `supabase/09_stores_and_lists.sql` (OWNER MUST RUN). Before it is run the app still works with one list (switching shows an error)
+
+## Done 2026-11-17 (store radius + locations, list chooser on search; UI untested, logic tested by script)
+- Preferences: set your ZIP and a maximum driving distance. Stores beyond it are excluded. When a chain has several locations inside the radius, only the closest is included by default; you can switch individual locations on/off (saved in `user_store_overrides`). Prices are treated as location-specific (each location has its own price rows). Stores with no coordinates stay included
+- Distance is an ESTIMATE: straight line x 1.3 from the ZIP centre (`lib/geo.ts`). A routing API could replace it later
+- Search and the shopping plan both use the same rule (`lib/storeAccess.ts`, `lib/storeAccessUtils.ts`)
+- Sample data regenerated: 6 stores with coordinates (2 extra locations to test "closest only"). `scripts/geocode-stores.mjs` writes `supabase/11_store_coordinates.sql` for real stores (Census geocoder, untested live)
+- "+ Add to list" on search: with 2+ lists it opens a dropdown to pick the list (name + item count); with one list it adds directly. Shows "Add to another list" afterwards
+- SQL run order: 08, 09, 10, then re-run 02_sample_data.sql, then (real stores) the geocode script + 11
 
 ## Next (in order)
 1. Run `supabase/01_security.sql`, then `supabase/02_sample_data.sql` in the Supabase SQL Editor

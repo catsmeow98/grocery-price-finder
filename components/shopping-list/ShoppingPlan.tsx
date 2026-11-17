@@ -29,7 +29,7 @@ import {
   toPreferenceMap,
 } from "@/lib/preferences";
 
-import { getExcludedStoreIds } from "@/lib/excludedStores";
+import { loadStoreAccess } from "@/lib/storeAccess";
 
 import {
   parsePlanSettings,
@@ -183,7 +183,13 @@ export default function ShoppingPlan({
         try {
           setStoresWarning(false);
 
-          setExcludedIds(await getExcludedStoreIds());
+          const { access } = await loadStoreAccess();
+
+          setExcludedIds(
+            access
+              .filter((entry) => !entry.included)
+              .map((entry) => entry.store.id)
+          );
         } catch (storeError) {
           console.error(
             "Unable to load excluded stores:",
@@ -435,8 +441,8 @@ export default function ShoppingPlan({
 
       {storesWarning && (
         <p className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-          Your excluded stores could not be loaded, so they
-          are NOT applied to this plan.
+          Your store choices could not be loaded, so every
+          store is being used in this plan.
         </p>
       )}
 

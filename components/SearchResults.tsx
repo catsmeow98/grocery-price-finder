@@ -281,8 +281,9 @@ export default function SearchResults({
 
       {excludedStores.size > 0 && (
         <p className="mb-4 text-sm text-text-muted">
-          Hiding prices from {excludedStores.size} excluded{" "}
-          {excludedStores.size === 1 ? "store" : "stores"}.{" "}
+          Hiding prices from {excludedStores.size} store{" "}
+          {excludedStores.size === 1 ? "location" : "locations"}{" "}
+          outside your area or excluded.{" "}
           <a
             href="/preferences"
             className="text-primary underline"

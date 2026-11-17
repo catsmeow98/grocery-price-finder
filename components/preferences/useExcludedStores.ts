@@ -2,15 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { getCurrentUser } from "@/lib/auth";
-import {
-  getExcludedStoreIds,
-  setStoreExcluded,
-} from "@/lib/excludedStores";
+import { loadStoreAccess } from "@/lib/storeAccess";
 
 /*
- * The stores the logged-in customer excluded, loaded once.
- * Logged-out visitors simply have none.
+ * The store locations this customer does NOT shop at, based on
+ * their location, max driving distance and own choices.
+ * Logged-out visitors have none.
  */
 export function useExcludedStores() {
   const [ids, setIds] = useState<string[]>([]);
@@ -24,22 +21,24 @@ export function useExcludedStores() {
 
     async function load() {
       try {
-        const user = await getCurrentUser();
+        const { access } = await loadStoreAccess();
 
-        if (!user || !active) return;
-
-        const loaded = await getExcludedStoreIds();
-
-        if (active) setIds(loaded);
+        if (active) {
+          setIds(
+            access
+              .filter((entry) => !entry.included)
+              .map((entry) => entry.store.id)
+          );
+        }
       } catch (error) {
         console.error(
-          "Unable to load excluded stores:",
+          "Unable to load store choices:",
           error
         );
 
         if (active) {
           setProblem(
-            "Your excluded stores could not be loaded, so they are not being applied."
+            "Your store choices could not be loaded, so they are not being applied."
           );
         }
       }
@@ -54,39 +53,5 @@ export function useExcludedStores() {
 
   const excluded = useMemo(() => new Set(ids), [ids]);
 
-  async function setExcluded(
-    storeId: string,
-    value: boolean
-  ) {
-    // Update the screen right away, then save.
-    setIds((current) =>
-      value
-        ? current.includes(storeId)
-          ? current
-          : [...current, storeId]
-        : current.filter((id) => id !== storeId)
-    );
-
-    try {
-      await setStoreExcluded(storeId, value);
-      setProblem(null);
-    } catch (error) {
-      console.error(
-        "Unable to save store choice:",
-        error
-      );
-
-      setProblem(
-        "Your store choice could not be saved. Has supabase/09_stores_and_lists.sql been run?"
-      );
-
-      try {
-        setIds(await getExcludedStoreIds());
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-
-  return { excluded, problem, setExcluded };
+  return { excluded, problem };
 }
